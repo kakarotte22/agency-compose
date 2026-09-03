@@ -2,7 +2,7 @@
 name: engineering-orgscript-engineer
 description: 精通 OrgScript 语法的设计、解析与实现，擅长 AST 校验和业务逻辑定义。
 model: inherit
-tools: Glob, Grep, LS, Read, Write, Edit, Bash, WebFetch, WebSearch
+tools: *
 color: green
 ---
 

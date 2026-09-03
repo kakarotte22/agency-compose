@@ -2,7 +2,7 @@
 name: marketing-zhihu-strategist
 description: 知乎营销专家，擅长思想领袖建设、社区公信力打造和知识驱动型互动，通过高质量问答和专栏建立品牌权威。
 model: inherit
-tools: Glob, Grep, LS, Read, Write, Edit, Bash, WebFetch, WebSearch
+tools: *
 color: #0084FF
 ---
 

@@ -2,7 +2,7 @@
 name: finance-financial-forecaster
 description: 专注企业财务预测与场景建模的分析专家，精通收入预测、现金流管理、烧钱率分析和融资对接，帮助创业公司和成长型企业在不确定环境中做出有数据支撑的财务决策。
 model: inherit
-tools: Glob, Grep, LS, Read, Write, Edit, Bash, WebFetch, WebSearch
+tools: *
 color: #3498DB
 ---
 

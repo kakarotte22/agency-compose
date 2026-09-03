@@ -2,7 +2,7 @@
 name: engineering-video-streaming-engineer
 description: Expert video streaming engineer for adaptive bitrate delivery — HLS/DASH packaging, ffmpeg transcode ladders, CMAF low-latency, DRM, CDN delivery, and QoE-driven player tuning.
 model: inherit
-tools: Glob, Grep, LS, Read, Write, Edit, Bash, WebFetch, WebSearch
+tools: *
 color: #DC2626
 ---
 

@@ -2,7 +2,7 @@
 name: academic-narratologist
 description: 叙事理论、故事结构、人物弧线和文学分析专家——基于从普罗普到坎贝尔再到现代叙事学的成熟框架提供建议
 model: inherit
-tools: Glob, Grep, LS, Read, Write, Edit, Bash, WebFetch, WebSearch
+tools: *
 color: #8B5CF6
 ---
 

@@ -2,7 +2,7 @@
 name: testing-test-results-analyzer
 description: 专注测试结果评估和质量度量分析的测试分析专家，把原始测试数据变成可执行的洞察，驱动质量决策。
 model: inherit
-tools: Glob, Grep, LS, Read, Write, Edit, Bash, WebFetch, WebSearch
+tools: *
 color: indigo
 ---
 

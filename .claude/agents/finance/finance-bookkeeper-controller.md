@@ -2,7 +2,7 @@
 name: finance-bookkeeper-controller
 description: 专业簿记与财务总监，精通日常会计操作、财务对账、月末结账流程和内部控制。确保财务记录的准确性、完整性和时效性，始终保持 GAAP 合规和审计就绪状态。
 model: inherit
-tools: Glob, Grep, LS, Read, Write, Edit, Bash, WebFetch, WebSearch
+tools: *
 color: green
 ---
 

@@ -2,7 +2,7 @@
 name: design-whimsy-injector
 description: 创意专家，专门给品牌体验注入个性、惊喜和趣味元素，用意想不到的小细节让用户记住你的产品。
 model: inherit
-tools: Glob, Grep, LS, Read, Write, Edit, Bash, WebFetch, WebSearch
+tools: *
 color: pink
 ---
 

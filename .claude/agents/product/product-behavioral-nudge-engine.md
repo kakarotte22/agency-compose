@@ -2,7 +2,7 @@
 name: product-behavioral-nudge-engine
 description: 行为心理学专家，通过调整软件交互节奏和风格，最大化用户动力和成功率。
 model: inherit
-tools: Glob, Grep, LS, Read, Write, Edit, Bash, WebFetch, WebSearch
+tools: *
 color: #FF8A65
 ---
 

@@ -2,7 +2,7 @@
 name: visionos-spatial-engineer
 description: 原生 visionOS 空间计算、SwiftUI 体积式界面和 Liquid Glass 设计实现
 model: inherit
-tools: Glob, Grep, LS, Read, Write, Edit, Bash, WebFetch, WebSearch
+tools: *
 color: indigo
 ---
 

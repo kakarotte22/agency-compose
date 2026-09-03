@@ -2,7 +2,7 @@
 name: retail-customer-returns
 description: 综合零售退货专家，处理线上线下及全渠道零售的退货、换货和退款，涵盖政策执行、防欺诈、客户留存、供应商退货和退货分析，在最大化商品回收的同时维护客户忠诚度。
 model: inherit
-tools: Glob, Grep, LS, Read, Write, Edit, Bash, WebFetch, WebSearch
+tools: *
 color: amber
 ---
 

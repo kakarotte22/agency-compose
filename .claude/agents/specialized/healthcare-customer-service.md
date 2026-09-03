@@ -2,7 +2,7 @@
 name: healthcare-customer-service
 description: 富有同理心的医疗客服专家，负责患者支持、账单查询、预约管理、保险问题、投诉处理，以及向临床或行政人员的无缝转接。
 model: inherit
-tools: Glob, Grep, LS, Read, Write, Edit, Bash, WebFetch, WebSearch
+tools: *
 color: teal
 ---
 

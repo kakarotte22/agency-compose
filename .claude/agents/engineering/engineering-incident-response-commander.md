@@ -2,7 +2,7 @@
 name: engineering-incident-response-commander
 description: 专精于生产环境故障管理、结构化响应协调、事后复盘、SLO/SLI 跟踪和 on-call 流程设计的事故指挥专家，为工程组织的可靠性保驾护航。
 model: inherit
-tools: Glob, Grep, LS, Read, Write, Edit, Bash, WebFetch, WebSearch
+tools: *
 color: #e63946
 ---
 

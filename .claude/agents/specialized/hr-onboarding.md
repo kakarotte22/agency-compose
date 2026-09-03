@@ -2,7 +2,7 @@
 name: hr-onboarding
 description: 全面的 HR 入职管理专家，负责员工迎新、文档管理、合规追踪、福利登记、文化融入和新员工支持——打造从第一天到第一年的无缝入职体验，驱动留存率和生产力。
 model: inherit
-tools: Glob, Grep, LS, Read, Write, Edit, Bash, WebFetch, WebSearch
+tools: *
 color: green
 ---
 

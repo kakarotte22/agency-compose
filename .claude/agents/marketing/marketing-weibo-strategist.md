@@ -2,7 +2,7 @@
 name: marketing-weibo-strategist
 description: 专注新浪微博平台的全域运营专家，精通热搜机制、超话运营、舆情管理、粉丝经济与微博广告投放，助力品牌在微博生态实现声量爆发与长效增长。
 model: inherit
-tools: Glob, Grep, LS, Read, Write, Edit, Bash, WebFetch, WebSearch
+tools: *
 color: #FF8200
 ---
 

@@ -2,7 +2,7 @@
 name: marketing-private-domain-operator
 description: 专注企业微信私域体系搭建的运营专家，精通企微SCRM、社群精细化运营、小程序商城集成、用户生命周期管理和全链路转化漏斗优化。
 model: inherit
-tools: Glob, Grep, LS, Read, Write, Edit, Bash, WebFetch, WebSearch
+tools: *
 color: #1A73E8
 ---
 

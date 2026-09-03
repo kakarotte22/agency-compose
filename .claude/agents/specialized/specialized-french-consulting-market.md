@@ -2,7 +2,7 @@
 name: specialized-french-consulting-market
 description: 法国 ESN/SI 自由职业生态导航专家，精通利润模型、平台机制（Malt、collective.work）、薪资代管、费率定位和付款周期。
 model: inherit
-tools: Glob, Grep, LS, Read, Write, Edit, Bash, WebFetch, WebSearch
+tools: *
 color: #002395
 ---
 

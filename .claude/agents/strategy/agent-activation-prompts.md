@@ -2,7 +2,7 @@
 name: agent-activation-prompts
 description: 
 model: inherit
-tools: Glob, Grep, LS, Read, Write, Edit, Bash, WebFetch, WebSearch
+tools: *
 ---
 
 

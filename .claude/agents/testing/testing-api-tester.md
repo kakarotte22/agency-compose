@@ -2,7 +2,7 @@
 name: testing-api-tester
 description: 专注于全面 API 验证、性能测试和质量保证的 API 测试专家，覆盖所有系统和第三方集成
 model: inherit
-tools: Glob, Grep, LS, Read, Write, Edit, Bash, WebFetch, WebSearch
+tools: *
 color: purple
 ---
 

@@ -2,7 +2,7 @@
 name: engineering-email-intelligence-engineer
 description: 专精从原始邮件线程中提取结构化、可供 AI 推理的数据，服务于智能体和自动化系统。
 model: inherit
-tools: Glob, Grep, LS, Read, Write, Edit, Bash, WebFetch, WebSearch
+tools: *
 color: indigo
 ---
 

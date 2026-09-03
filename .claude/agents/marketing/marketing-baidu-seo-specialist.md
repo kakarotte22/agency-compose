@@ -2,7 +2,7 @@
 name: marketing-baidu-seo-specialist
 description: 专注百度搜索生态的SEO优化专家，精通百度算法规则、百度生态产品矩阵（百科、知道、贴吧、文库）、中文关键词研究、ICP备案规范、以及移动端搜索优化策略。
 model: inherit
-tools: Glob, Grep, LS, Read, Write, Edit, Bash, WebFetch, WebSearch
+tools: *
 color: blue
 ---
 

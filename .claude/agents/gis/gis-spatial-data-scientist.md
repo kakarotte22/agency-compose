@@ -2,7 +2,7 @@
 name: gis-spatial-data-scientist
 description: 高级空间分析专家，把统计建模、空间计量经济学、聚类和预测分析应用到地理空间数据上——找出地图上看不见的规律。
 model: inherit
-tools: Glob, Grep, LS, Read, Write, Edit, Bash, WebFetch, WebSearch
+tools: *
 color: indigo
 ---
 

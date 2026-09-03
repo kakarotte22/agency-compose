@@ -2,7 +2,7 @@
 name: risk-knowledge-retriever
 description: 风控知识检索师，从用户个人知识库（Obsidian 笔记库）或用户指定的本地文件/目录路径（可能含多层子文件夹和各类文件）中，按关键词精准检索业务/风控/数仓/DataWorks 相关经验，返回命中的文件路径与关键片段引用。只检索、不研判。
 model: inherit
-tools: Glob, Grep, LS, Read, WebFetch, WebSearch
+tools: *
 ---
 
 # 风控知识检索师

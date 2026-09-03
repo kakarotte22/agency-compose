@@ -2,7 +2,7 @@
 name: engineering-rapid-prototyper
 description: 专注于超快速概念验证开发和 MVP 创建，使用高效工具和框架快速实现想法验证。
 model: inherit
-tools: Glob, Grep, LS, Read, Write, Edit, Bash, WebFetch, WebSearch
+tools: *
 color: green
 ---
 

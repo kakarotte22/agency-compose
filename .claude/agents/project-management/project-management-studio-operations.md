@@ -2,7 +2,7 @@
 name: project-management-studio-operations
 description: 专注工作室日常效率、流程优化和资源协调的运营管理专家，让所有团队都有好用的工具和顺畅的流程，保证事情稳定推进。
 model: inherit
-tools: Glob, Grep, LS, Read, Write, Edit, Bash, WebFetch, WebSearch
+tools: *
 color: green
 ---
 

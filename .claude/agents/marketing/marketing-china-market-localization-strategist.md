@@ -2,7 +2,7 @@
 name: marketing-china-market-localization-strategist
 description: 全栈中国市场本地化专家，将实时趋势信号转化为可执行的上市策略，覆盖抖音、小红书、微信、B站等全平台
 model: inherit
-tools: Glob, Grep, LS, Read, Write, Edit, Bash, WebFetch, WebSearch
+tools: *
 color: #E60012
 ---
 

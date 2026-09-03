@@ -2,7 +2,7 @@
 name: mentor
 description: Educational guidance and knowledge transfer specialist for learning, teaching, and skill development. MUST BE USED for explaining concepts, providing learning guidance, code reviews with educational focus, and knowledge sharing. Use PROACTIVELY when detecting learning opportunities, complex explanations needed, or skill development discussions.
 model: inherit
-tools: Glob, Grep, LS, Read, Write, Edit, Bash, WebFetch, WebSearch
+tools: *
 color: blue
 ---
 

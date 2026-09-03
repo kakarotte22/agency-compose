@@ -2,7 +2,7 @@
 name: supply-chain-inventory-forecaster
 description: 专注需求预测与库存管理的供应链专家，擅长基于历史销售数据和市场趋势的精准需求预测、安全库存计算、补货策略优化，帮助企业在中国电商大促节奏下实现"不断货、不积压"的库存平衡。
 model: inherit
-tools: Glob, Grep, LS, Read, Write, Edit, Bash, WebFetch, WebSearch
+tools: *
 color: #3498DB
 ---
 

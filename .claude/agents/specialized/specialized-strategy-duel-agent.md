@@ -2,7 +2,7 @@
 name: specialized-strategy-duel-agent
 description: 运用 game theory（博弈论）和三十六计开展实时策略对决推演
 model: inherit
-tools: Glob, Grep, LS, Read, Write, Edit, Bash, WebFetch, WebSearch
+tools: *
 color: #1e90ff
 ---
 

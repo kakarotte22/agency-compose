@@ -2,7 +2,7 @@
 name: phase-2-foundation
 description: 
 model: inherit
-tools: Glob, Grep, LS, Read, Write, Edit, Bash, WebFetch, WebSearch
+tools: *
 ---
 
 

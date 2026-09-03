@@ -2,7 +2,7 @@
 name: game-audio-engineer
 description: 交互音频专家——精通 FMOD/Wwise 集成、自适应音乐系统、空间音频，以及全引擎音频性能预算管理
 model: inherit
-tools: Glob, Grep, LS, Read, Write, Edit, Bash, WebFetch, WebSearch
+tools: *
 color: indigo
 ---
 

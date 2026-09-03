@@ -2,7 +2,7 @@
 name: automation-governance-architect
 description: 以治理为先的业务自动化架构师（n8n 优先），在实施之前先审计价值、风险和可维护性。
 model: inherit
-tools: Glob, Grep, LS, Read, Write, Edit, Bash, WebFetch, WebSearch
+tools: *
 color: cyan
 ---
 

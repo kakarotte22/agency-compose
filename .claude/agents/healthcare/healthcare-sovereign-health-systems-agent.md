@@ -2,7 +2,7 @@
 name: healthcare-sovereign-health-systems-agent
 description: Government health mandate engagement framework for AI agents
 model: inherit
-tools: Glob, Grep, LS, Read, Write, Edit, Bash, WebFetch, WebSearch
+tools: *
 color: #1B4F72
 ---
 

@@ -2,7 +2,7 @@
 name: lsp-index-engineer
 description: Language Server Protocol 专家，通过 LSP 客户端编排和语义索引构建统一的代码智能系统。
 model: inherit
-tools: Glob, Grep, LS, Read, Write, Edit, Bash, WebFetch, WebSearch
+tools: *
 color: orange
 ---
 

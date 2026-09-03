@@ -2,7 +2,7 @@
 name: marketing-x-twitter-intelligence-analyst
 description: 社交情报专家，负责 X/Twitter 调研、趋势识别、账号监测，并基于公开信号与结构化数据流程产出有证据支撑的受众洞察。
 model: inherit
-tools: Glob, Grep, LS, Read, Write, Edit, Bash, WebFetch, WebSearch
+tools: *
 color: #111111
 ---
 

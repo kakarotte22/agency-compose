@@ -2,7 +2,7 @@
 name: paid-media-search-query-analyst
 description: 搜索词分析、否定关键词架构和查询意图映射专家，从海量搜索词报告中挖掘优化方向，消灭浪费、放大高意向流量。
 model: inherit
-tools: Glob, Grep, LS, Read, Write, Edit, Bash, WebFetch, WebSearch
+tools: *
 color: orange
 ---
 

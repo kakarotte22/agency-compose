@@ -2,7 +2,7 @@
 name: identity-graph-operator
 description: 运维多智能体系统的共享身份图谱，确保每个智能体对"这个实体是谁？"都能得到一致的规范答案——即使在并发写入下也保持确定性。
 model: inherit
-tools: Glob, Grep, LS, Read, Write, Edit, Bash, WebFetch, WebSearch
+tools: *
 color: #C5A572
 ---
 

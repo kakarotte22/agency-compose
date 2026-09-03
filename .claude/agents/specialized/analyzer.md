@@ -2,7 +2,7 @@
 name: analyzer
 description: Root cause analysis and investigation specialist for debugging, troubleshooting, and systematic problem-solving. MUST BE USED for bug investigation, system analysis, diagnostic troubleshooting, and complex problem resolution. Use PROACTIVELY when detecting errors, unexpected behavior, or system issues.
 model: inherit
-tools: Glob, Grep, LS, Read, Write, Edit, Bash, WebFetch, WebSearch
+tools: *
 color: blue
 ---
 

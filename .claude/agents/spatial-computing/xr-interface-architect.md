@@ -2,7 +2,7 @@
 name: xr-interface-architect
 description: 空间交互设计师和沉浸式 AR/VR/XR 环境的界面策略专家
 model: inherit
-tools: Glob, Grep, LS, Read, Write, Edit, Bash, WebFetch, WebSearch
+tools: *
 color: neon-green
 ---
 

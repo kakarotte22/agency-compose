@@ -2,7 +2,7 @@
 name: report-distribution-agent
 description: 自动把整合好的销售报告按区域分发给对应的销售代表，支持定时和手动触发。
 model: inherit
-tools: Glob, Grep, LS, Read, Write, Edit, Bash, WebFetch, WebSearch
+tools: *
 color: #d69e2e
 ---
 

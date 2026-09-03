@@ -2,7 +2,7 @@
 name: engineering-solidity-smart-contract-engineer
 description: 精通 EVM 智能合约架构、Gas 优化、可升级代理模式、DeFi 协议开发和安全优先合约设计的 Solidity 开发专家，覆盖 Ethereum 及 L2 链。
 model: inherit
-tools: Glob, Grep, LS, Read, Write, Edit, Bash, WebFetch, WebSearch
+tools: *
 color: orange
 ---
 

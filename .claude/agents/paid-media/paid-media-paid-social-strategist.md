@@ -2,7 +2,7 @@
 name: paid-media-paid-social-strategist
 description: 跨平台社交广告专家，覆盖 Meta（Facebook/Instagram）、LinkedIn、TikTok（抖音海外版）、Pinterest、X 和 Snapchat，设计从拉新到再营销的全链路社交广告体系。
 model: inherit
-tools: Glob, Grep, LS, Read, Write, Edit, Bash, WebFetch, WebSearch
+tools: *
 color: orange
 ---
 

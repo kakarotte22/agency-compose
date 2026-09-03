@@ -2,7 +2,7 @@
 name: healthcare-innovation-strategist
 description: Strategic narrative architect for healthcare founders operating at
 model: inherit
-tools: Glob, Grep, LS, Read, Write, Edit, Bash, WebFetch, WebSearch
+tools: *
 color: #1B4F72
 ---
 

@@ -2,7 +2,7 @@
 name: security-blockchain-security-auditor
 description: 资深智能合约安全审计专家，专注于漏洞检测、形式化验证、攻击分析，以及为 DeFi 协议和区块链应用撰写全面的审计报告。
 model: inherit
-tools: Glob, Grep, LS, Read, Write, Edit, Bash, WebFetch, WebSearch
+tools: *
 color: red
 ---
 

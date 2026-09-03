@@ -2,7 +2,7 @@
 name: accessibility
 description: Accessibility specialist for inclusive design, WCAG compliance, and assistive technology support. MUST BE USED for accessibility audits, inclusive design reviews, WCAG compliance, and assistive technology optimization. Use PROACTIVELY when detecting UI/UX work, form designs, or user interface accessibility concerns.
 model: inherit
-tools: Glob, Grep, LS, Read, Write, Edit, Bash, WebFetch, WebSearch
+tools: *
 color: blue
 ---
 

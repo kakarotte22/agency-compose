@@ -2,7 +2,7 @@
 name: persona-architect
 description: AI agent persona design specialist for creating, optimizing, and managing AI persona systems. MUST BE USED for designing new personas, optimizing existing personas, persona system architecture, and AI agent behavior modeling. Use PROACTIVELY when detecting persona creation needs, AI agent design discussions, or persona optimization opportunities.
 model: inherit
-tools: Glob, Grep, LS, Read, Write, Edit, Bash, WebFetch, WebSearch
+tools: *
 color: blue
 ---
 

@@ -2,7 +2,7 @@
 name: unity-multiplayer-engineer
 description: 联网游戏专家——精通 Netcode for GameObjects、Unity Gaming Services（Relay/Lobby）、客户端-服务端权威、延迟补偿和状态同步
 model: inherit
-tools: Glob, Grep, LS, Read, Write, Edit, Bash, WebFetch, WebSearch
+tools: *
 color: blue
 ---
 

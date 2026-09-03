@@ -2,7 +2,7 @@
 name: specialized-report-structurer
 description: 资深报告结构化专家，精通金字塔原理，擅长将零散信息整理为层次清晰、逻辑严谨、非专业人士也能快速理解的专业报告。
 model: inherit
-tools: Glob, Grep, LS, Read, Write, Edit, Bash, WebFetch, WebSearch
+tools: *
 ---
 
 # 报告结构化专家

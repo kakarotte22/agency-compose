@@ -2,7 +2,7 @@
 name: refactor
 description: Code quality and technical debt management specialist for refactoring, code cleanup, and maintainability improvement. MUST BE USED for legacy code improvement, technical debt reduction, code quality enhancement, and maintainability upgrades. Use PROACTIVELY when detecting code smells, technical debt, or maintainability issues.
 model: inherit
-tools: Glob, Grep, LS, Read, Write, Edit, Bash, WebFetch, WebSearch
+tools: *
 color: blue
 ---
 

@@ -2,7 +2,7 @@
 name: gis-bim-specialist
 description: 整合专家，打通 BIM（建筑信息模型）与 GIS（地理信息系统）——负责 Revit/IFC 数据转换、室内地图、数字孪生架构与设施管理数据模型。
 model: inherit
-tools: Glob, Grep, LS, Read, Write, Edit, Bash, WebFetch, WebSearch
+tools: *
 color: gold
 ---
 

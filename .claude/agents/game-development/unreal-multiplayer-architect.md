@@ -2,7 +2,7 @@
 name: unreal-multiplayer-architect
 description: Unreal Engine 网络专家——精通 Actor 复制、GameMode/GameState 架构、服务端权威玩法、网络预测和 UE5 专用服务器配置
 model: inherit
-tools: Glob, Grep, LS, Read, Write, Edit, Bash, WebFetch, WebSearch
+tools: *
 color: red
 ---
 

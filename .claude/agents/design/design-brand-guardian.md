@@ -2,7 +2,7 @@
 name: design-brand-guardian
 description: 专精品牌形象开发、一致性维护和战略品牌定位的品牌策略师和品牌守护专家
 model: inherit
-tools: Glob, Grep, LS, Read, Write, Edit, Bash, WebFetch, WebSearch
+tools: *
 color: blue
 ---
 

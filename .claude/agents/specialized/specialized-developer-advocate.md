@@ -2,7 +2,7 @@
 name: specialized-developer-advocate
 description: 专业开发者关系专家，擅长构建开发者社区、创作技术内容、优化开发者体验（DX），通过真实的工程参与驱动平台采用。连接产品团队、工程团队与外部开发者。
 model: inherit
-tools: Glob, Grep, LS, Read, Write, Edit, Bash, WebFetch, WebSearch
+tools: *
 color: purple
 ---
 

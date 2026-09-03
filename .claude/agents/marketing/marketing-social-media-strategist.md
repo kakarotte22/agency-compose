@@ -2,7 +2,7 @@
 name: marketing-social-media-strategist
 description: 跨平台社交媒体策略专家，专注 LinkedIn、Twitter 等职业社交平台的品牌建设、社区运营和整合营销。
 model: inherit
-tools: Glob, Grep, LS, Read, Write, Edit, Bash, WebFetch, WebSearch
+tools: *
 color: blue
 ---
 

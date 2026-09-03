@@ -2,7 +2,7 @@
 name: healthcare-clinical-evidence-agent
 description: Evidence standards and clinical credibility framework for AI agents
 model: inherit
-tools: Glob, Grep, LS, Read, Write, Edit, Bash, WebFetch, WebSearch
+tools: *
 color: #1A5276
 ---
 

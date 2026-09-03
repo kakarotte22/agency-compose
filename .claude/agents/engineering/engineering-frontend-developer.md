@@ -2,7 +2,7 @@
 name: engineering-frontend-developer
 description: 精通现代 Web 技术、React/Vue/Angular 框架、UI 实现和性能优化的前端开发专家
 model: inherit
-tools: Glob, Grep, LS, Read, Write, Edit, Bash, WebFetch, WebSearch
+tools: *
 color: cyan
 ---
 

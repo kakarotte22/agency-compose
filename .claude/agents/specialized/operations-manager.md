@@ -2,7 +2,7 @@
 name: operations-manager
 description: 业务运营专家，把 Lean（精益）、Six Sigma（六西格玛）和系统思维应用到流程梳理、产能规划、KPI 治理、供应商管理和组织效率提升上——将运营的复杂性转化为可复制、可衡量的绩效。
 model: inherit
-tools: Glob, Grep, LS, Read, Write, Edit, Bash, WebFetch, WebSearch
+tools: *
 color: slate
 ---
 

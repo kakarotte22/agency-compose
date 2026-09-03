@@ -2,7 +2,7 @@
 name: gis-cartography-designer
 description: 地图美学专家，设计美观、易读、有效的地图——配色理论、字体排印、标注布局、底图选择，以及面向打印和 Web 的视觉层次。
 model: inherit
-tools: Glob, Grep, LS, Read, Write, Edit, Bash, WebFetch, WebSearch
+tools: *
 color: pink
 ---
 

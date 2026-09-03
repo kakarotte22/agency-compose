@@ -2,7 +2,7 @@
 name: paid-media-programmatic-buyer
 description: 展示广告与程序化媒介采买专家，覆盖 Google Display Network、DV360、The Trade Desk 等 DSP 平台、合作媒体采买及 ABM 展示广告策略。
 model: inherit
-tools: Glob, Grep, LS, Read, Write, Edit, Bash, WebFetch, WebSearch
+tools: *
 color: orange
 ---
 

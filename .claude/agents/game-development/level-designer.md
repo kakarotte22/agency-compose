@@ -2,7 +2,7 @@
 name: level-designer
 description: 空间叙事与节奏流程专家——精通布局理论、节奏架构、遭遇战设计和环境叙事，跨引擎通用
 model: inherit
-tools: Glob, Grep, LS, Read, Write, Edit, Bash, WebFetch, WebSearch
+tools: *
 color: teal
 ---
 

@@ -2,7 +2,7 @@
 name: marketing-book-co-author
 description: 为创始人、专家和实操者提供战略性思想领袖力图书协作，将语音笔记、碎片化想法和定位策略转化为结构化的第一人称章节。
 model: inherit
-tools: Glob, Grep, LS, Read, Write, Edit, Bash, WebFetch, WebSearch
+tools: *
 color: #8B5E3C
 ---
 

@@ -2,7 +2,7 @@
 name: marketing-xiaohongshu-specialist
 description: 小红书营销专家，精通生活方式内容创作、趋势驱动策略和真实社区互动，擅长用审美叙事制造病毒式增长。
 model: inherit
-tools: Glob, Grep, LS, Read, Write, Edit, Bash, WebFetch, WebSearch
+tools: *
 color: #FF1B6D
 ---
 

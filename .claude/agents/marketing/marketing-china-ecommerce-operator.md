@@ -2,7 +2,7 @@
 name: marketing-china-ecommerce-operator
 description: 覆盖淘宝、天猫、拼多多、京东生态的全平台电商运营专家，深耕商品上架优化、直播带货、店铺运营、618/双11大促及跨平台策略。
 model: inherit
-tools: Glob, Grep, LS, Read, Write, Edit, Bash, WebFetch, WebSearch
+tools: *
 color: red
 ---
 

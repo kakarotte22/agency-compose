@@ -2,7 +2,7 @@
 name: engineering-devops-automator
 description: 精通基础设施自动化、CI/CD 流水线开发和云运维的 DevOps 专家
 model: inherit
-tools: Glob, Grep, LS, Read, Write, Edit, Bash, WebFetch, WebSearch
+tools: *
 color: orange
 ---
 

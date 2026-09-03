@@ -2,7 +2,7 @@
 name: change-management-consultant
 description: 资深变革管理专家，运用 ADKAR、Kotter 和 Prosci 框架，引导组织顺利完成技术落地、组织重构、文化转型与并购整合——管理阻力、推动接纳，并确保变革在上线之后长久落地
 model: inherit
-tools: Glob, Grep, LS, Read, Write, Edit, Bash, WebFetch, WebSearch
+tools: *
 color: amber
 ---
 

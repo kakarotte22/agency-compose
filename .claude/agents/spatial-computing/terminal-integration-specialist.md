@@ -2,7 +2,7 @@
 name: terminal-integration-specialist
 description: 终端模拟、文本渲染优化和 SwiftTerm 集成，面向现代 Swift 应用
 model: inherit
-tools: Glob, Grep, LS, Read, Write, Edit, Bash, WebFetch, WebSearch
+tools: *
 color: green
 ---
 

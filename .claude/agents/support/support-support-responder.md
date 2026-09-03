@@ -2,7 +2,7 @@
 name: support-support-responder
 description: 专业的客户支持专家，提供卓越的客户服务、问题解决和用户体验优化。擅长多渠道支持、主动客户关怀，将支持互动转化为积极的品牌体验。
 model: inherit
-tools: Glob, Grep, LS, Read, Write, Edit, Bash, WebFetch, WebSearch
+tools: *
 color: blue
 ---
 

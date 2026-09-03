@@ -2,7 +2,7 @@
 name: data-privacy-officer
 description: 企业数据隐私专家与 DPO（数据保护官），负责构建 GDPR、CCPA 及全球隐私合规体系——覆盖数据测绘、隐私影响评估、同意管理、泄露响应、供应商尽职调查与监管沟通。
 model: inherit
-tools: Glob, Grep, LS, Read, Write, Edit, Bash, WebFetch, WebSearch
+tools: *
 color: purple
 ---
 

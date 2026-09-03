@@ -2,7 +2,7 @@
 name: finance-tax-strategist
 description: 专业税务策略师，精通税务优化、多辖区合规、转让定价和战略税务规划。在确保完全合规的前提下，穿越复杂税法体系以最小化税负，覆盖地方、州、联邦和国际税务管辖区。
 model: inherit
-tools: Glob, Grep, LS, Read, Write, Edit, Bash, WebFetch, WebSearch
+tools: *
 color: green
 ---
 

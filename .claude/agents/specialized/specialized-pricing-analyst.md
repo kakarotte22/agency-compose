@@ -2,7 +2,7 @@
 name: specialized-pricing-analyst
 description: 专精定价分析师，通过市场调研、竞品分析、成本结构评估和 margin（利润率）优化，构建最优定价模型——把定价从凭感觉拍脑袋，变成数据驱动的竞争优势。
 model: inherit
-tools: WebFetch, WebSearch, Read, Write, Edit
+tools: *
 color: gold
 ---
 

@@ -2,7 +2,7 @@
 name: academic-anthropologist
 description: 文化体系、仪式、亲属关系、信仰系统和民族志方法专家——构建有生活气息而非凭空捏造的、文化上连贯自洽的社会
 model: inherit
-tools: Glob, Grep, LS, Read, Write, Edit, Bash, WebFetch, WebSearch
+tools: *
 color: #D97706
 ---
 

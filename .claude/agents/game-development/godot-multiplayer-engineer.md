@@ -2,7 +2,7 @@
 name: godot-multiplayer-engineer
 description: Godot 4 网络专家——精通 MultiplayerAPI、场景复制、ENet/WebRTC 传输、RPC 和权威模型，面向实时多人游戏
 model: inherit
-tools: Glob, Grep, LS, Read, Write, Edit, Bash, WebFetch, WebSearch
+tools: *
 color: violet
 ---
 

@@ -361,7 +361,8 @@
     "role_path": "specialized/prompt-engineer",
     "category": "specialized",
     "cn_name": "提示词工程师",
-    "desc": "专注大语言模型提示词设计与优化的专家，精通系统提示词架构、思维链设计、少样本学习策略、以及提示词效果评测和迭代方法论。"
+    "desc": "专注大语言模型提示词设计与优化的专家，精通系统提示词架构、思维链设计、少样本学习策略、以及提示词效果评测和迭代方法论。",
+    "deprecated": "engineering-prompt-engineer"
   },
   {
     "name": "change-management-consultant",
@@ -1621,7 +1622,8 @@
     "role_path": "engineering/engineering-threat-detection-engineer",
     "category": "engineering",
     "cn_name": "威胁检测工程师",
-    "desc": "专精于 SIEM 规则开发、MITRE ATT&CK 覆盖度映射、威胁狩猎、告警调优和检测即代码流水线的安全运营检测工程专家。"
+    "desc": "专精于 SIEM 规则开发、MITRE ATT&CK 覆盖度映射、威胁狩猎、告警调优和检测即代码流水线的安全运营检测工程专家。",
+    "deprecated": "security-threat-detection-engineer"
   },
   {
     "name": "engineering-database-optimizer",
@@ -1705,7 +1707,8 @@
     "role_path": "engineering/engineering-security-engineer",
     "category": "engineering",
     "cn_name": "安全工程师",
-    "desc": "专业应用安全工程师，专注于威胁建模、漏洞评估、安全代码审查、安全架构设计和事件响应，服务于现代 Web、API 和云原生应用。"
+    "desc": "专业应用安全工程师，专注于威胁建模、漏洞评估、安全代码审查、安全架构设计和事件响应，服务于现代 Web、API 和云原生应用。",
+    "deprecated": "security-appsec-engineer"
   },
   {
     "name": "engineering-devops-automator",
@@ -2055,7 +2058,8 @@
     "role_path": "specialized/backend-architect-with-memory",
     "category": "specialized",
     "cn_name": "后端架构师（带记忆）",
-    "desc": "资深后端架构师，专注可扩展系统设计、数据库架构、API 开发与云基础设施。构建健壮、安全、高性能的服务端应用与微服务。"
+    "desc": "资深后端架构师，专注可扩展系统设计、数据库架构、API 开发与云基础设施。构建健壮、安全、高性能的服务端应用与微服务。",
+    "deprecated": "engineering-backend-architect"
   },
   {
     "name": "healthcare-aging-parent-care-companion",
@@ -2335,6 +2339,7 @@
     "role_path": "engineering/sre",
     "category": "engineering",
     "cn_name": "SRE 专家",
-    "desc": "站点可靠性工程（SRE）专家，专注系统可靠性、事件响应、错误预算与可观测性。MUST BE USED 于可靠性改进、事件管理、SLA/SLO 定义与可观测性实施。在检测到可靠性问题、监控缺口或卓越运营需求时主动使用。"
+    "desc": "站点可靠性工程（SRE）专家，专注系统可靠性、事件响应、错误预算与可观测性。MUST BE USED 于可靠性改进、事件管理、SLA/SLO 定义与可观测性实施。在检测到可靠性问题、监控缺口或卓越运营需求时主动使用。",
+    "deprecated": "engineering-sre"
   }
 ]

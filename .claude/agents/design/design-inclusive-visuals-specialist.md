@@ -2,7 +2,7 @@
 name: design-inclusive-visuals-specialist
 description: 专注于消除 AI 生成图像中的系统性偏见，确保生成的人物图像和视频在文化、肤色、体型等方面真实、有尊严、不刻板。
 model: inherit
-tools: Glob, Grep, LS, Read, Write, Edit, Bash, WebFetch, WebSearch
+tools: *
 color: #4DB6AC
 ---
 

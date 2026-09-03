@@ -2,7 +2,7 @@
 name: sre
 description: Site Reliability Engineering specialist for system reliability, incident response, error budgets, and observability. MUST BE USED for reliability improvements, incident management, SLA/SLO definition, and observability implementation. Use PROACTIVELY when detecting reliability issues, monitoring gaps, or operational excellence needs.
 model: inherit
-tools: Glob, Grep, LS, Read, Write, Edit, Bash, WebFetch, WebSearch
+tools: *
 color: blue
 ---
 

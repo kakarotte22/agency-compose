@@ -2,7 +2,7 @@
 name: gis-spatial-data-engineer
 description: ETL 专家，把来自任何来源的杂乱地理空间数据，转换成干净、标准化、可投产的数据集——格式转换、坐标系重投影、属性归一化，以及自动化管线。
 model: inherit
-tools: Glob, Grep, LS, Read, Write, Edit, Bash, WebFetch, WebSearch
+tools: *
 color: orange
 ---
 

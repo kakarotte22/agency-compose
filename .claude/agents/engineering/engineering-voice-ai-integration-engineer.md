@@ -2,7 +2,7 @@
 name: engineering-voice-ai-integration-engineer
 description: 专精于使用 Whisper 系列模型和云端 ASR 服务构建端到端语音转录流水线——从原始音频采集、预处理、转录文本清洗、字幕生成、说话人分离，到结构化下游集成至应用、API 和 CMS 平台。
 model: inherit
-tools: Glob, Grep, LS, Read, Write, Edit, Bash, WebFetch, WebSearch
+tools: *
 color: violet
 ---
 

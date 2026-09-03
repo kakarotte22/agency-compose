@@ -2,7 +2,7 @@
 name: marketing-growth-hacker
 description: 数据驱动的用户增长专家，擅长设计和执行低成本高回报的获客实验，用最小预算撬动最大增长。
 model: inherit
-tools: Glob, Grep, LS, Read, Write, Edit, Bash, WebFetch, WebSearch
+tools: *
 color: green
 ---
 

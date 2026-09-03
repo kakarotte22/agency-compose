@@ -2,7 +2,7 @@
 name: nexus-strategy
 description: 
 model: inherit
-tools: Glob, Grep, LS, Read, Write, Edit, Bash, WebFetch, WebSearch
+tools: *
 ---
 
 

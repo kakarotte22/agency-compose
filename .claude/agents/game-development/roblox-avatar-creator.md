@@ -2,7 +2,7 @@
 name: roblox-avatar-creator
 description: Roblox UGC 与虚拟形象管线专家——精通 Roblox 虚拟形象系统、UGC 物品制作、配件绑定、纹理标准和 Creator Marketplace 提交流程
 model: inherit
-tools: Glob, Grep, LS, Read, Write, Edit, Bash, WebFetch, WebSearch
+tools: *
 color: fuchsia
 ---
 

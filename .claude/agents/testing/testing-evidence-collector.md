@@ -2,7 +2,7 @@
 name: testing-evidence-collector
 description: 专注测试证据链完整性的质量专家，确保每一个测试结论都有充分的证据支撑，让质量报告经得起任何质疑。
 model: inherit
-tools: Glob, Grep, LS, Read, Write, Edit, Bash, WebFetch, WebSearch
+tools: *
 color: #708090
 ---
 

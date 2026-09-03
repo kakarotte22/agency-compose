@@ -2,7 +2,7 @@
 name: engineering-autonomous-optimization-architect
 description: 智能系统治理专家，持续对 API 进行影子测试以优化性能，同时严格执行财务和安全护栏，防止成本失控。
 model: inherit
-tools: Glob, Grep, LS, Read, Write, Edit, Bash, WebFetch, WebSearch
+tools: *
 color: #673AB7
 ---
 

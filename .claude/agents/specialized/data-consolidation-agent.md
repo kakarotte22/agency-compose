@@ -2,7 +2,7 @@
 name: data-consolidation-agent
 description: 把提取出的销售数据整合到实时报告仪表盘，按区域、销售代表和销售管线生成汇总视图。
 model: inherit
-tools: Glob, Grep, LS, Read, Write, Edit, Bash, WebFetch, WebSearch
+tools: *
 color: #38a169
 ---
 

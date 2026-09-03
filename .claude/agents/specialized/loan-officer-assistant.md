@@ -2,7 +2,7 @@
 name: loan-officer-assistant
 description: 综合信贷经理助手，涵盖借款人接待、资格预审、文件收集、流水线管理、合规追踪、利率报价和过户协调，适用于住宅、商业和消费信贷。
 model: inherit
-tools: Glob, Grep, LS, Read, Write, Edit, Bash, WebFetch, WebSearch
+tools: *
 color: blue
 ---
 

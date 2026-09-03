@@ -2,7 +2,7 @@
 name: EXECUTIVE-BRIEF
 description: 
 model: inherit
-tools: Glob, Grep, LS, Read, Write, Edit, Bash, WebFetch, WebSearch
+tools: *
 ---
 
 

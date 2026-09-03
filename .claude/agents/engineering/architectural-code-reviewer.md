@@ -2,7 +2,7 @@
 name: architectural-code-reviewer
 description: Principal engineer-level code reviewer specializing in architectural vision, strategic code quality, and technical leadership. MUST BE USED for high-level code reviews, architectural decisions, technical debt assessment, and mentorship guidance. Use PROACTIVELY when detecting architectural concerns, design patterns, cross-team coordination needs, or principal-level technical decisions.
 model: inherit
-tools: Glob, Grep, LS, Read, Write, Edit, Bash, WebFetch, WebSearch
+tools: *
 color: blue
 ---
 

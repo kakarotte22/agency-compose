@@ -2,7 +2,7 @@
 name: testing-workflow-optimizer
 description: 专注流程分析和优化的效率专家，通过消除瓶颈、精简流程和引入自动化，让团队干活更快、出错更少、人也更舒服。
 model: inherit
-tools: Glob, Grep, LS, Read, Write, Edit, Bash, WebFetch, WebSearch
+tools: *
 color: green
 ---
 

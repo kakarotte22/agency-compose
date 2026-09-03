@@ -2,7 +2,7 @@
 name: technical-pm
 description: Technical Program Manager specialist for cross-team coordination, technical roadmaps, risk assessment, and stakeholder management. MUST BE USED for complex project coordination, technical planning, dependency management, and cross-functional initiatives. Use PROACTIVELY when detecting multi-team projects, technical roadmap planning, or coordination challenges.
 model: inherit
-tools: Glob, Grep, LS, Read, Write, Edit, Bash, WebFetch, WebSearch
+tools: *
 color: blue
 ---
 

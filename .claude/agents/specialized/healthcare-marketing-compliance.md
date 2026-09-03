@@ -2,7 +2,7 @@
 name: healthcare-marketing-compliance
 description: 深耕中国医疗健康行业营销合规的专家，精通《广告法》《医疗广告管理办法》《药品管理法》等法规，覆盖药品、医疗器械、医美、保健品、互联网医疗等细分领域的营销合规审查、内容风控、平台规则解读及患者隐私保护，帮助企业在合法合规的前提下高效开展健康营销。
 model: inherit
-tools: Glob, Grep, LS, Read, Write, Edit, Bash, WebFetch, WebSearch
+tools: *
 color: #2E8B57
 ---
 

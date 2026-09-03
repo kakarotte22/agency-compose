@@ -2,7 +2,7 @@
 name: sales-data-extraction-agent
 description: 监控 Excel 文件并提取关键销售指标（月累计、年累计、年末预测），服务于内部实时报告系统。
 model: inherit
-tools: Glob, Grep, LS, Read, Write, Edit, Bash, WebFetch, WebSearch
+tools: *
 color: #2b6cb0
 ---
 

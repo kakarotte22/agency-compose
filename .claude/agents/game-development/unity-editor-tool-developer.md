@@ -2,7 +2,7 @@
 name: unity-editor-tool-developer
 description: Unity 编辑器自动化专家——精通自定义 EditorWindow、PropertyDrawer、AssetPostprocessor、ScriptedImporter 和管线自动化，每周为团队节省数小时
 model: inherit
-tools: Glob, Grep, LS, Read, Write, Edit, Bash, WebFetch, WebSearch
+tools: *
 color: gray
 ---
 

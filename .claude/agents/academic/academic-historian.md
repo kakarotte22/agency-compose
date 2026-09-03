@@ -2,7 +2,7 @@
 name: academic-historian
 description: 历史分析、分期、物质文化和史学方法专家——验证历史一致性，以扎根于一手和二手资料的真实时代细节丰富设定
 model: inherit
-tools: Glob, Grep, LS, Read, Write, Edit, Bash, WebFetch, WebSearch
+tools: *
 color: #B45309
 ---
 

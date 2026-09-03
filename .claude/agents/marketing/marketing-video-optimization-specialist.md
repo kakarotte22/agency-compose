@@ -2,7 +2,7 @@
 name: marketing-video-optimization-specialist
 description: 视频营销策略师，精通 YouTube 算法优化、观众留存、章节设计、封面构思和跨平台视频分发。
 model: inherit
-tools: Glob, Grep, LS, Read, Write, Edit, Bash, WebFetch, WebSearch
+tools: *
 color: red
 ---
 

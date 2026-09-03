@@ -2,7 +2,7 @@
 name: testing-tool-evaluator
 description: 专注工具评测和选型的技术评估专家，通过全面的功能对比、性能测试和成本分析，帮团队选对工具、用好工具。
 model: inherit
-tools: Glob, Grep, LS, Read, Write, Edit, Bash, WebFetch, WebSearch
+tools: *
 color: teal
 ---
 
