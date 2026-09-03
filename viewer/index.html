@@ -880,13 +880,20 @@ function computeLayout(steps, edges) {
   const children = {}; steps.forEach(s => { children[s.id] = []; });
   edges.forEach(([f, t]) => { if (children[f]) children[f].push(t); });
 
-  // 拓扑分层：layer = 最长上游路径（0 为最顶层入口）
+  // 拓扑分层：layer = 最长上游路径（0 为最顶层入口）。
+  // 编排方案允许含环（回退/辩论/自迭代）：环走 loop 字段、不进 depends_on，
+  // 但架构师产出不受控——depends_on 偶发成环时不能让画布栈溢出。
+  // 处于当前递归栈上的依赖视为回边，不计入层高（按 0 层近似），保证可渲染。
   const memo = {};
+  const visiting = new Set();
   function calcLayer(id) {
     if (memo[id] !== undefined) return memo[id];
+    if (visiting.has(id)) return 0; // 回边：跳过，避免无限递归
     if (!deps[id] || deps[id].length === 0) { memo[id] = 0; return 0; }
+    visiting.add(id);
     let max = 0;
     deps[id].forEach(d => { max = Math.max(max, calcLayer(d) + 1); });
+    visiting.delete(id);
     memo[id] = max; return max;
   }
   steps.forEach(s => calcLayer(s.id));

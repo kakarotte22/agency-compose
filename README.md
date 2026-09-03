@@ -63,7 +63,7 @@ agency-compose/
    ```
 
 3. Claude Code 会自动：
-   - 调 `engineering-multi-agent-systems-architect`（多智能体架构师）设计编排方案（DAG，含带轮次上限的循环）
+   - 调 `engineering-multi-agent-systems-architect`（多智能体架构师）设计编排方案（有向图，允许含带轮次上限的回路：回退 / 辩论 / 自迭代）
    - 主程序按方案用 `Agent` 工具真实调度多个 subagent 串行/并行执行
    - 汇总裁决出最终成品
    - 把全程过程数据存档到 `cases/<任务名>-时间戳/`，供事后 review
