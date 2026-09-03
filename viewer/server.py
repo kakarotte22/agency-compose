@@ -18,6 +18,7 @@ import queue
 import signal
 import sys
 import threading
+import time
 import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -52,6 +53,7 @@ def _make_run():
         "exit_code": None,
         "log": [],  # 追加式完整日志，供刷新后回放（进程内存，重启即清）
         "next_seq": 1,      # 事件单调序号：前端回放日志后据此跳过已看过的事件
+        "started_at": None, # run 启动时间（epoch 秒）：前端据此识别归属本 run 的 case 目录
         "subscribers": 0,   # 当前 SSE 订阅者数
         "cancel_timer": None,  # 「无人订阅则延迟取消」的计时器
     }
@@ -168,6 +170,7 @@ class Handler(BaseHTTPRequestHandler):
                 "requirement": run["requirement"],
                 "status": run["status"],
                 "exit_code": run["exit_code"],
+                "started_at": run["started_at"],
                 "log": run["log"],
             })
             return
@@ -210,6 +213,7 @@ class Handler(BaseHTTPRequestHandler):
         run_id = uuid.uuid4().hex[:12]
         run = _make_run()
         run["requirement"] = requirement
+        run["started_at"] = time.time()
         with RUNS_LOCK:
             RUNS[run_id] = run
         run["status"] = "running"

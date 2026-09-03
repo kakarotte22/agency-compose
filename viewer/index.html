@@ -1374,6 +1374,7 @@ const composeState = {
   casesBefore: new Set(),   // 启动前已有的 case 目录名
   liveCaseDir: null,        // 执行中新发现的 case 目录
   liveData: null,           // 实时 DAG 数据 {steps, edges}
+  startedAtTs: null,        // run 启动时间（epoch 秒，来自服务端）：刷新恢复时按时间归属 case
   logCount: 0,
   pollTimer: null,
 };
@@ -1546,14 +1547,24 @@ function handleLogEvent(payload) {
 async function pollForCase() {
   try {
     const cases = await loadCases();
+    // 识别本次编排的 case 目录，两条路径互补：
+    // 1. 增量检测：不在 casesBefore 基线里的新目录（常规场景）
+    // 2. 时间戳归属：目录名里的 YYYYMMDD-HHMMSS ≥ run 启动时间的已有目录
+    //    ——覆盖「刷新恢复」场景：设计已落盘、目录已建，但刷新后它已在基线里，
+    //    增量检测永远抓不到，只能按时间归属识别
+    let found = null;
     for (const c of cases) {
-      if (!composeState.casesBefore.has(c.dir)) {
-        // 发现新 case
-        composeState.liveCaseDir = c.dir;
-        break;
+      if (!composeState.casesBefore.has(c.dir)) { found = c.dir; break; }
+    }
+    if (!found && composeState.startedAtTs && composeState.runId) {
+      for (const c of cases) {
+        if (c.ts && tsToEpoch(c.ts) >= composeState.startedAtTs - 60) {
+          found = c.dir; break;
+        }
       }
     }
-    // 一旦有新 case，尝试读取它的完整数据渲染 DAG
+    if (found) composeState.liveCaseDir = found;
+    // 一旦有归属 case，尝试读取它的完整数据渲染 DAG
     if (composeState.liveCaseDir && !composeState.liveData) {
       try {
         const data = await loadCase(composeState.liveCaseDir);
@@ -1564,6 +1575,14 @@ async function pollForCase() {
       } catch (e) { /* 方案还没落盘，继续等 */ }
     }
   } catch (e) { /* 忽略轮询错误 */ }
+}
+
+// "YYYYMMDD-HHMMSS"（本地时间）-> epoch 秒；格式不符返回 null
+function tsToEpoch(ts) {
+  const m = ts.match(/^(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})$/);
+  if (!m) return null;
+  const d = new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]);
+  return isNaN(d.getTime()) ? null : Math.floor(d.getTime() / 1000);
 }
 
 function renderLiveDag(data) {
@@ -1585,6 +1604,7 @@ function startCompose() {
   composeState.done = false;
   composeState.liveData = null;
   composeState.liveCaseDir = null;
+  composeState.startedAtTs = Math.floor(Date.now() / 1000);
   agentCallRoles.clear();
   lastEventSeq = 0;
   clearConsole();
@@ -1717,6 +1737,8 @@ async function restoreRun(runId) {
     if (data.error) return;
 
     composeState.runId = data.run_id;
+    // 服务端启动时间为准（刷新恢复场景下比本地时钟可靠），用于按时间归属 case 目录
+    if (data.started_at) composeState.startedAtTs = data.started_at;
     clearConsole();
     // 回放全量日志；记住最大序号，重连 SSE 后跳过这些旧事件（防止日志重复）
     for (const evt of data.log) {
@@ -1770,6 +1792,13 @@ async function restoreRun(runId) {
         if (composeState.liveCaseDir) {
           appendLog("narrate", `📁 已存档到 cases/${composeState.liveCaseDir}`);
           refreshSidebarHighlight(composeState.liveCaseDir);
+        }
+        // 恢复运行态时若 hint 仍在转圈（设计未落盘），恢复为中性提示
+        if (!composeState.liveData) {
+          const hint = $("#dagHint");
+          hint.style.display = "flex";
+          hint.querySelector(".spinner").style.display = "none";
+          hint.querySelector("div:last-child").textContent = "该次编排未产出任务流（可能中途失败或被取消）";
         }
       });
     }
