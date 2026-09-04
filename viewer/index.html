@@ -1086,54 +1086,89 @@ function drawEdges(svg, edges, pos, NODE_W, NODE_H, loopEdges, decById) {
     list.forEach((p, i) => fwdInOff.set(p.f + "=>" + p.t, ss[i] * PORT_SPAN));
   });
 
-  const LOOP_LANE_GAP = 20; // 回边水平通道的层间距
+  const LOOP_LANE_GAP = 22; // 回边 U 形绕行的层间距
   const FWD_JITTER = 12;    // 前向边中继高度的微错开幅度
 
+  // 三次贝塞尔曲线边（draw.io / react-flow 的默认策略）：
+  // 曲线自然分离、无长水平段横穿节点区域，比正交折线在复杂图上干净得多。
+  // 箭头沿终点切线方向绘制。
   const _mkPath = (from, to, cls, strokeColor, opts) => {
     const a = pos[from], b = pos[to];
     if (!a || !b) return;
-    let d, arrowPts, labelX, labelY, labelAnchor;
+    let p0, p3, c1, c2, labelText, labelPos;
     if (!opts.up) {
-      // 下行（前向边）：源底部端口 -> 目标顶部端口
-      const ax = a.x + NODE_W / 2 + (fwdOutOff.get(from + "=>" + to) || 0);
-      const bx = b.x + NODE_W / 2 + (fwdInOff.get(from + "=>" + to) || 0);
-      const y1 = a.y + NODE_H, y2 = b.y;
-      const midY = (y1 + y2) / 2 + (opts.jitter || 0);
-      d = `M ${ax} ${y1} V ${midY} H ${bx} V ${y2}`;
-      arrowPts = `${bx - 4},${y2 - 7} ${bx + 4},${y2 - 7} ${bx},${y2}`;
-      labelX = ax - 6; labelY = y1 + 14; labelAnchor = "end";
+      // 前向边：源底部端口 -> 目标顶部端口
+      p0 = { x: a.x + NODE_W / 2 + (fwdOutOff.get(from + "=>" + to) || 0), y: a.y + NODE_H };
+      p3 = { x: b.x + NODE_W / 2 + (fwdInOff.get(from + "=>" + to) || 0), y: b.y };
+      const dy = p3.y - p0.y, dx = p3.x - p0.x;
+      if (dy > 40) {
+        // 下行：垂直 S 曲线（少量水平分量适配斜跨列）
+        const gap = Math.min(Math.max(dy * 0.45, 36), 110) + (opts.jitter || 0);
+        c1 = { x: p0.x + dx * 0.1, y: p0.y + gap };
+        c2 = { x: p3.x - dx * 0.1, y: p3.y - gap };
+      } else {
+        // 同层/近同层：水平 S 曲线
+        c1 = { x: p0.x + dx * 0.4, y: p0.y };
+        c2 = { x: p3.x - dx * 0.4, y: p3.y };
+      }
+      // 「是」标签：起点沿初始方向偏移，避开曲线
+      if (opts.label) {
+        labelPos = dy > 40
+          ? { x: p0.x - 7, y: p0.y + 20, anchor: "end" }
+          : { x: p0.x + (dx > 0 ? 10 : -10), y: p0.y + 4, anchor: dx > 0 ? "start" : "end" };
+        labelText = opts.label.text;
+      }
     } else {
-      // 上行（回边）：源底部端口下垂绕行，从目标底部端口向上进入
-      const ax = a.x + NODE_W / 2 + (loopOutOff.get(opts.edge) || 0);
-      const bx = b.x + NODE_W / 2 + (loopInOff.get(opts.edge) || 0);
-      const y1 = a.y + NODE_H, y2 = b.y + NODE_H;
-      const dropY = y1 + 26 + (opts.lane || 0) * LOOP_LANE_GAP;
-      d = `M ${ax} ${y1} V ${dropY} H ${bx} V ${y2}`;
-      arrowPts = `${bx - 4},${y2 + 7} ${bx + 4},${y2 + 7} ${bx},${y2}`;
-      labelX = ax + 6; labelY = dropY - 6; labelAnchor = "start";
+      // 回边（「否」分支）：U 形绕行弧线，从目标底部向上进入；
+      // drop 深度按 lane 错层，多条回边弧线不共线
+      p0 = { x: a.x + NODE_W / 2 + (loopOutOff.get(opts.edge) || 0), y: a.y + NODE_H };
+      p3 = { x: b.x + NODE_W / 2 + (loopInOff.get(opts.edge) || 0), y: b.y + NODE_H };
+      const drop = 46 + (opts.lane || 0) * LOOP_LANE_GAP;
+      c1 = { x: p0.x, y: p0.y + drop };
+      c2 = { x: p3.x, y: p3.y + drop };
+      // 标签放曲线最低点（t=0.5）附近
+      if (opts.label) {
+        const mid = {
+          x: (p0.x + 3 * c1.x + 3 * c2.x + p3.x) / 8,
+          y: (p0.y + 3 * c1.y + 3 * c2.y + p3.y) / 8,
+        };
+        labelPos = { x: mid.x + 7, y: mid.y - 7, anchor: "start" };
+        labelText = opts.label.text;
+      }
     }
     const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-    path.setAttribute("d", d);
+    path.setAttribute("d", `M ${p0.x} ${p0.y} C ${c1.x} ${c1.y} ${c2.x} ${c2.y} ${p3.x} ${p3.y}`);
     path.setAttribute("class", cls);
     if (strokeColor) path.setAttribute("stroke", strokeColor);
     path.dataset.from = from; path.dataset.to = to;
 
-    const arrow = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
-    arrow.setAttribute("points", arrowPts);
+    // 箭头：沿终点切线（p3 - c2）方向
     const isLoop = cls.includes("edge-loop");
+    const arrow = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
+    const tv = { x: p3.x - c2.x, y: p3.y - c2.y };
+    const tl = Math.hypot(tv.x, tv.y) || 1;
+    const dir = { x: tv.x / tl, y: tv.y / tl };          // 指向终点
+    const nor = { x: -dir.y, y: dir.x };                 // 法向
+    const A = 9, W = 4.5;                                 // 箭头长/半宽
+    const pts = [
+      `${p3.x},${p3.y}`,
+      `${p3.x - dir.x * A + nor.x * W},${p3.y - dir.y * A + nor.y * W}`,
+      `${p3.x - dir.x * A - nor.x * W},${p3.y - dir.y * A - nor.y * W}`,
+    ];
+    arrow.setAttribute("points", pts.join(" "));
     const kindCls = cls.includes("backedge") ? "backedge" : cls.includes("debate") ? "debate" : cls.includes("self") ? "self" : "";
     arrow.setAttribute("class", isLoop ? "edge-arrow edge-loop-arrow " + kindCls : "edge-arrow");
     if (isLoop && strokeColor) arrow.setAttribute("fill", strokeColor);
     edgeLayer.appendChild(path);
     edgeLayer.appendChild(arrow);
 
-    if (opts.label) {
+    if (labelText && labelPos) {
       const t = document.createElementNS("http://www.w3.org/2000/svg", "text");
-      t.setAttribute("x", labelX);
-      t.setAttribute("y", labelY);
-      t.setAttribute("text-anchor", labelAnchor);
-      t.setAttribute("class", "edge-label" + (opts.label.cls ? " " + opts.label.cls : ""));
-      t.textContent = opts.label.text;
+      t.setAttribute("x", labelPos.x);
+      t.setAttribute("y", labelPos.y);
+      t.setAttribute("text-anchor", labelPos.anchor);
+      t.setAttribute("class", "edge-label" + (opts.label && opts.label.cls ? " " + opts.label.cls : ""));
+      t.textContent = labelText;
       edgeLayer.appendChild(t);
     }
   };
