@@ -1089,6 +1089,23 @@ function drawEdges(svg, edges, pos, NODE_W, NODE_H, loopEdges, decById) {
   const LOOP_LANE_GAP = 22; // 回边 U 形绕行的层间距
   const FWD_JITTER = 12;    // 前向边中继高度的微错开幅度
 
+  // 形状感知端口：把「矩形边框上的端口」投影到节点真实形状的边界上。
+  // 菱形的底/顶不是一条边而是只有一个尖，矩形式端口会悬在菱形外——
+  // 按菱形边界方程 |dx|/半宽 + |dy|/半高 = 1 插值，让边精确落在菱形边上；
+  // 矩形节点维持底/顶边行为不变。端口分散到 ±半宽 时自然落在左右尖。
+  const isDiamond = (id) => !!(decById && decById[id]);
+  const HW = NODE_W / 2, HH = NODE_H / 2;
+  const portBottom = (id, dx) => {
+    const p = pos[id], cx = p.x + HW, cy = p.y + HH;
+    if (isDiamond(id)) return { x: cx + dx, y: cy + HH * (1 - Math.abs(dx) / HW) };
+    return { x: cx + dx, y: p.y + NODE_H };
+  };
+  const portTop = (id, dx) => {
+    const p = pos[id], cx = p.x + HW, cy = p.y + HH;
+    if (isDiamond(id)) return { x: cx + dx, y: cy - HH * (1 - Math.abs(dx) / HW) };
+    return { x: cx + dx, y: p.y };
+  };
+
   // 三次贝塞尔曲线边（draw.io / react-flow 的默认策略）：
   // 曲线自然分离、无长水平段横穿节点区域，比正交折线在复杂图上干净得多。
   // 箭头沿终点切线方向绘制。
@@ -1097,9 +1114,9 @@ function drawEdges(svg, edges, pos, NODE_W, NODE_H, loopEdges, decById) {
     if (!a || !b) return;
     let p0, p3, c1, c2, labelText, labelPos;
     if (!opts.up) {
-      // 前向边：源底部端口 -> 目标顶部端口
-      p0 = { x: a.x + NODE_W / 2 + (fwdOutOff.get(from + "=>" + to) || 0), y: a.y + NODE_H };
-      p3 = { x: b.x + NODE_W / 2 + (fwdInOff.get(from + "=>" + to) || 0), y: b.y };
+      // 前向边：源底部端口 -> 目标顶部端口（端口在节点真实形状边界上）
+      p0 = portBottom(from, fwdOutOff.get(from + "=>" + to) || 0);
+      p3 = portTop(to, fwdInOff.get(from + "=>" + to) || 0);
       const dy = p3.y - p0.y, dx = p3.x - p0.x;
       if (dy > 40) {
         // 下行：垂直 S 曲线（少量水平分量适配斜跨列）
@@ -1119,10 +1136,10 @@ function drawEdges(svg, edges, pos, NODE_W, NODE_H, loopEdges, decById) {
         labelText = opts.label.text;
       }
     } else {
-      // 回边（「否」分支）：U 形绕行弧线，从目标底部向上进入；
+      // 回边（「否」分支）：U 形绕行弧线，从目标底部（形状感知端口）向上进入；
       // drop 深度按 lane 错层，多条回边弧线不共线
-      p0 = { x: a.x + NODE_W / 2 + (loopOutOff.get(opts.edge) || 0), y: a.y + NODE_H };
-      p3 = { x: b.x + NODE_W / 2 + (loopInOff.get(opts.edge) || 0), y: b.y + NODE_H };
+      p0 = portBottom(from, loopOutOff.get(opts.edge) || 0);
+      p3 = portBottom(to, loopInOff.get(opts.edge) || 0);
       const drop = 46 + (opts.lane || 0) * LOOP_LANE_GAP;
       c1 = { x: p0.x, y: p0.y + drop };
       c2 = { x: p3.x, y: p3.y + drop };
