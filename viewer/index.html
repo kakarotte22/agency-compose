@@ -981,6 +981,28 @@ function computeLayout(steps, edges) {
     layers[l].forEach((s, i) => { order[s.id] = i; });
   });
 
+  // 交叉计数：当前序下相邻层之间的边交叉数（用于排序后的贪心交换微调）
+  const countCrossings = () => {
+    let n = 0;
+    for (let li = 0; li < layerKeys.length - 1; li++) {
+      const upper = layers[layerKeys[li]], lower = layers[layerKeys[li + 1]];
+      // 每对 (上层的边, 下层的边) 若端点序交错则计一次交叉
+      const pairs = [];
+      upper.forEach(s => (deps[s.id] || []).forEach(d => {
+        if (order[d] !== undefined) pairs.push([order[s.id], order[d]]);
+      }));
+      for (let a = 0; a < pairs.length; a++) {
+        for (let b = a + 1; b < pairs.length; b++) {
+          const [u1, v1] = pairs[a], [u2, v2] = pairs[b];
+          if (u1 === u2) continue;
+          if ((u1 < u2 && v1 > v2) || (u1 > u2 && v1 < v2)) n++;
+        }
+      }
+      void lower;
+    }
+    return n;
+  };
+
   // 从顶层开始，向下用"上游重心"重排下层；再从底层向上，用"下游重心"重排上层
   for (let pass = 0; pass < 4; pass++) {
     // 自顶向下：用已定序的上游层的平均序号，重排当前层
@@ -1004,6 +1026,30 @@ function computeLayout(steps, edges) {
       });
       arr.sort((a, b) => bary[a.id] - bary[b.id]);
       arr.forEach((s, i) => { order[s.id] = i; });
+    }
+  }
+
+  // 贪心交换微调：重心排序后仍可能残留「交换相邻两节点可减交叉」的局部次优。
+  // 逐层尝试交换相邻对，交叉数下降则保留；O(n²·E) 在本地小图上完全可接受。
+  for (let li = 0; li < layerKeys.length; li++) {
+    const arr = layers[layerKeys[li]];
+    let improved = true;
+    let guard = 0;
+    while (improved && guard++ < 20) {
+      improved = false;
+      for (let i = 0; i < arr.length - 1; i++) {
+        const before = countCrossings();
+        const a = arr[i], b = arr[i + 1];
+        order[a.id] = i + 1; order[b.id] = i;
+        arr[i] = b; arr[i + 1] = a;
+        if (countCrossings() < before) {
+          improved = true; // 保留交换
+        } else {
+          // 回退
+          order[a.id] = i; order[b.id] = i + 1;
+          arr[i] = a; arr[i + 1] = b;
+        }
+      }
     }
   }
 
@@ -1109,10 +1155,158 @@ function drawEdges(svg, edges, pos, NODE_W, NODE_H, loopEdges, decById) {
   // 三次贝塞尔曲线边（draw.io / react-flow 的默认策略）：
   // 曲线自然分离、无长水平段横穿节点区域，比正交折线在复杂图上干净得多。
   // 箭头沿终点切线方向绘制。
+  //
+  // 节点避让：曲线若穿过中间节点（不在起终点行范围内的第三者），
+  // 把控制点整体向避开方向平移，让曲线绕着节点走而非穿过。
+  const nodeRects = Object.keys(pos).map(id => ({ id, ...pos[id] }));
+  // 点是否落在节点内部（第三者）：菱形判断节点按菱形边界方程判定
+  // （菱形四角空白区不算穿过，比矩形框判定更准确也更宽松），矩形按边框。
+  const curveHitsNode = (x, y) => {
+    for (const r of nodeRects) {
+      if (r.id === undefined) continue;
+      const cx = r.x + NODE_W / 2, cy = r.y + NODE_H / 2;
+      if (decById && decById[r.id]) {
+        const v = Math.abs(x - cx) / (NODE_W / 2) + Math.abs(y - cy) / (NODE_H / 2);
+        if (v < 0.92) return r; // 菱形内部（留 8% 边距）
+      } else if (x > r.x + 4 && x < r.x + NODE_W - 4 && y > r.y + 4 && y < r.y + NODE_H - 4) {
+        return r;
+      }
+    }
+    return null;
+  };
+  // A* 网格绕障路由：返回 p0→p3 的拐点数组（不含起终点），无解返回 null。
+  // 画布按 CELL px 栅格化，第三者节点矩形外扩 MARGIN 视为障碍，8 方向搜索
+  // （代价 10/14，octile 启发式，禁斜穿障碍角），结果压成方向变化拐点并
+  // 在拐点两侧各退一段做切角——Catmull-Rom 样条过这些点才不会切回障碍。
+  const routeAround = (from, to, p0, p3) => {
+    const CELL = 10, MARGIN = 16;
+    const obstacles = nodeRects.filter(r => r.id !== from && r.id !== to);
+    if (!obstacles.length) return null;
+    // 搜索框：障碍包围盒 + 起终点，四周留 60px 余地给绕行
+    let bx0 = Math.min(p0.x, p3.x), by0 = Math.min(p0.y, p3.y);
+    let bx1 = Math.max(p0.x, p3.x), by1 = Math.max(p0.y, p3.y);
+    for (const r of obstacles) {
+      bx0 = Math.min(bx0, r.x); by0 = Math.min(by0, r.y);
+      bx1 = Math.max(bx1, r.x + NODE_W); by1 = Math.max(by1, r.y + NODE_H);
+    }
+    bx0 -= 60; by0 -= 60; bx1 += 60; by1 += 60;
+    const W = Math.ceil((bx1 - bx0) / CELL) + 1, H = Math.ceil((by1 - by0) / CELL) + 1;
+    if (W * H > 250000) return null; // 兜底：异常大的图直接放弃绕行
+    const blk = new Uint8Array(W * H);
+    for (const r of obstacles) {
+      const gx0 = Math.max(0, Math.floor((r.x - MARGIN - bx0) / CELL));
+      const gx1 = Math.min(W - 1, Math.ceil((r.x + NODE_W + MARGIN - bx0) / CELL));
+      const gy0 = Math.max(0, Math.floor((r.y - MARGIN - by0) / CELL));
+      const gy1 = Math.min(H - 1, Math.ceil((r.y + NODE_H + MARGIN - by0) / CELL));
+      for (let gy = gy0; gy <= gy1; gy++) {
+        for (let gx = gx0; gx <= gx1; gx++) blk[gy * W + gx] = 1;
+      }
+    }
+    const cellOf = (p) => [
+      Math.min(W - 1, Math.max(0, Math.round((p.x - bx0) / CELL))),
+      Math.min(H - 1, Math.max(0, Math.round((p.y - by0) / CELL))),
+    ];
+    // 起点/终点格若被邻近节点外扩区覆盖，在附近小半径内找一个可用格
+    const freeCell = (gx, gy) => {
+      if (gx >= 0 && gy >= 0 && gx < W && gy < H && !blk[gy * W + gx]) return [gx, gy];
+      for (let rad = 1; rad < 6; rad++) {
+        for (let dy = -rad; dy <= rad; dy++) for (let dx = -rad; dx <= rad; dx++) {
+          const nx = gx + dx, ny = gy + dy;
+          if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue;
+          if (!blk[ny * W + nx]) return [nx, ny];
+        }
+      }
+      return null;
+    };
+    const s0 = freeCell(...cellOf(p0)), t0 = freeCell(...cellOf(p3));
+    if (!s0 || !t0) return null;
+    const [sx, sy] = s0, [tx, ty] = t0;
+    // A* 主循环（二叉堆维护 open 集）
+    const gS = new Float64Array(W * H).fill(Infinity);
+    const came = new Int32Array(W * H).fill(-1);
+    const closed = new Uint8Array(W * H);
+    const heap = [];
+    const hpush = (f, i) => {
+      heap.push([f, i]);
+      let c = heap.length - 1;
+      while (c > 0) { const p = (c - 1) >> 1; if (heap[p][0] <= heap[c][0]) break;
+        [heap[p], heap[c]] = [heap[c], heap[p]]; c = p; }
+    };
+    const hpop = () => {
+      const top = heap[0], last = heap.pop();
+      if (heap.length) {
+        heap[0] = last;
+        let c = 0;
+        for (;;) { const l = c * 2 + 1, r = l + 1; let m = c;
+          if (l < heap.length && heap[l][0] < heap[m][0]) m = l;
+          if (r < heap.length && heap[r][0] < heap[m][0]) m = r;
+          if (m === c) break; [heap[m], heap[c]] = [heap[c], heap[m]]; c = m; }
+      }
+      return top;
+    };
+    const octile = (x, y) => {
+      const dx = Math.abs(x - tx), dy = Math.abs(y - ty);
+      return 10 * (dx + dy) - 6 * Math.min(dx, dy); // = 10*max + 4*min（≈14 斜走）
+    };
+    const si = sy * W + sx, ti = ty * W + tx;
+    gS[si] = 0; hpush(octile(sx, sy), si);
+    let found = false, pops = 0;
+    while (heap.length && pops++ < 60000) {
+      const [, ci] = hpop();
+      if (closed[ci]) continue;
+      closed[ci] = 1;
+      if (ci === ti) { found = true; break; }
+      const cx = ci % W, cy = (ci - cx) / W;
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+        if (!dx && !dy) continue;
+        const nx = cx + dx, ny = cy + dy;
+        if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue;
+        const ni = ny * W + nx;
+        if (blk[ni] || closed[ni]) continue;
+        if (dx && dy && (blk[cy * W + nx] || blk[ny * W + cx])) continue; // 禁斜穿障碍角
+        const ng = gS[ci] + (dx && dy ? 14 : 10);
+        if (ng < gS[ni]) { gS[ni] = ng; came[ni] = ci; hpush(ng + octile(nx, ny), ni); }
+      }
+    }
+    if (!found) return null;
+    // 回溯格点路径 → 画布坐标（首尾换成精确端口位置）
+    const cells = [];
+    for (let ci = ti; ci !== -1; ci = came[ci]) cells.push(ci);
+    cells.reverse();
+    const pts = cells.map(ci => {
+      const cx = ci % W, cy = (ci - cx) / W;
+      return { x: bx0 + cx * CELL, y: by0 + cy * CELL };
+    });
+    pts[0] = { x: p0.x, y: p0.y };
+    pts[pts.length - 1] = { x: p3.x, y: p3.y };
+    // 压成方向变化的拐点
+    const corners = [pts[0]];
+    for (let i = 1; i < pts.length - 1; i++) {
+      const d1x = pts[i].x - pts[i - 1].x, d1y = pts[i].y - pts[i - 1].y;
+      const d2x = pts[i + 1].x - pts[i].x, d2y = pts[i + 1].y - pts[i].y;
+      if (d1x !== d2x || d1y !== d2y) corners.push(pts[i]);
+    }
+    corners.push(pts[pts.length - 1]);
+    // 拐点切角：直角拐点换成两侧各退 r px 的斜切点，样条平滑后不切进障碍角
+    const out = [corners[0]];
+    for (let i = 1; i < corners.length - 1; i++) {
+      const a = corners[i - 1], b = corners[i], c = corners[i + 1];
+      const l1 = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+      const l2 = Math.hypot(c.x - b.x, c.y - b.y) || 1;
+      const r = Math.min(12, l1 / 3, l2 / 3);
+      out.push(
+        { x: b.x - (b.x - a.x) / l1 * r, y: b.y - (b.y - a.y) / l1 * r },
+        { x: b.x + (c.x - b.x) / l2 * r, y: b.y + (c.y - b.y) / l2 * r },
+      );
+    }
+    out.push(corners[corners.length - 1]);
+    return out.slice(1, -1); // 不含起终点
+  };
   const _mkPath = (from, to, cls, strokeColor, opts) => {
     const a = pos[from], b = pos[to];
     if (!a || !b) return;
     let p0, p3, c1, c2, labelText, labelPos;
+    let splinePts = null; // A* 绕障路径（命中节点时启用，Catmull-Rom 平滑）
     if (!opts.up) {
       // 前向边：源底部端口 -> 目标顶部端口（端口在节点真实形状边界上）
       p0 = portBottom(from, fwdOutOff.get(from + "=>" + to) || 0);
@@ -1135,6 +1329,22 @@ function drawEdges(svg, edges, pos, NODE_W, NODE_H, loopEdges, decById) {
           : { x: p0.x + (dx > 0 ? 10 : -10), y: p0.y + 4, anchor: dx > 0 ? "start" : "end" };
         labelText = opts.label.text;
       }
+      // —— 节点避让：采样曲线，穿过第三者节点则改走 A* 网格绕障路由 ——
+      // 采样密度 t=0.1~0.9 与命中区间同尺度；命中则交给 routeAround 搜出
+      // 无碰撞折线（拐点已切角），返回 null（无解/图太大）时保持直连曲线。
+      splinePts = null;
+      let hits = 0;
+      for (let i = 1; i < 10; i++) {
+        const t = i / 10, mt = 1 - t;
+        const px = mt * mt * mt * p0.x + 3 * mt * mt * t * c1.x + 3 * mt * t * t * c2.x + t * t * t * p3.x;
+        const py = mt * mt * mt * p0.y + 3 * mt * mt * t * c1.y + 3 * mt * t * t * c2.y + t * t * t * p3.y;
+        const h = curveHitsNode(px, py);
+        if (h && h.id !== from && h.id !== to) { hits = 1; break; }
+      }
+      if (hits) {
+        const via = routeAround(from, to, p0, p3);
+        if (via && via.length) splinePts = [p0, ...via, p3];
+      }
     } else {
       // 回边（「否」分支）：U 形绕行弧线，从目标底部（形状感知端口）向上进入；
       // drop 深度按 lane 错层，多条回边弧线不共线
@@ -1153,16 +1363,39 @@ function drawEdges(svg, edges, pos, NODE_W, NODE_H, loopEdges, decById) {
         labelText = opts.label.text;
       }
     }
+    let dAttr;
+    if (splinePts) {
+      // Catmull-Rom 样条转三次贝塞尔：过所有拐点、切线由邻点决定，
+      // 比折线圆润，也比单段贝塞尔更贴合 A* 搜出的绕行走廊
+      const P = splinePts;
+      dAttr = `M ${P[0].x} ${P[0].y}`;
+      for (let i = 0; i < P.length - 1; i++) {
+        const p_1 = P[Math.max(0, i - 1)], p0_ = P[i], p1_ = P[i + 1], p2_ = P[Math.min(P.length - 1, i + 2)];
+        const c1_ = { x: p0_.x + (p1_.x - p_1.x) / 6, y: p0_.y + (p1_.y - p_1.y) / 6 };
+        const c2_ = { x: p1_.x - (p2_.x - p0_.x) / 6, y: p1_.y - (p2_.y - p0_.y) / 6 };
+        dAttr += ` C ${c1_.x} ${c1_.y} ${c2_.x} ${c2_.y} ${p1_.x} ${p1_.y}`;
+      }
+    } else {
+      dAttr = `M ${p0.x} ${p0.y} C ${c1.x} ${c1.y} ${c2.x} ${c2.y} ${p3.x} ${p3.y}`;
+    }
     const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-    path.setAttribute("d", `M ${p0.x} ${p0.y} C ${c1.x} ${c1.y} ${c2.x} ${c2.y} ${p3.x} ${p3.y}`);
+    path.setAttribute("d", dAttr);
     path.setAttribute("class", cls);
     if (strokeColor) path.setAttribute("stroke", strokeColor);
     path.dataset.from = from; path.dataset.to = to;
 
-    // 箭头：沿终点切线（p3 - c2）方向
+    // 箭头：沿终点切线方向（单段贝塞尔 = p3 - c2；样条 = 末段贝塞尔终点切线）
     const isLoop = cls.includes("edge-loop");
     const arrow = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
-    const tv = { x: p3.x - c2.x, y: p3.y - c2.y };
+    let tX, tY;
+    if (splinePts) {
+      // 末段 Catmull-Rom 的终点切向量：p2_ 被钳位到终点，切线 = 末段方向
+      const P = splinePts, n = P.length;
+      tX = P[n - 1].x - P[n - 2].x; tY = P[n - 1].y - P[n - 2].y;
+    } else {
+      tX = p3.x - c2.x; tY = p3.y - c2.y;
+    }
+    const tv = { x: tX, y: tY };
     const tl = Math.hypot(tv.x, tv.y) || 1;
     const dir = { x: tv.x / tl, y: tv.y / tl };          // 指向终点
     const nor = { x: -dir.y, y: dir.x };                 // 法向
