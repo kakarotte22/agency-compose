@@ -273,13 +273,32 @@ body::after {
 .edge.edge-loop { stroke-dasharray: 6 5; stroke-width: 1.8; }
 .edge.edge-loop.backedge { stroke: var(--vermilion, #a63a2b); }
 .edge.edge-loop.debate   { stroke: var(--amber, #b5832f); }
+.edge.edge-loop.self     { stroke: var(--loop); }
 .edge-loop-arrow.backedge { fill: var(--vermilion, #a63a2b); stroke: var(--vermilion, #a63a2b); }
 .edge-loop-arrow.debate   { fill: var(--amber, #b5832f); stroke: var(--amber, #b5832f); }
+.edge-loop-arrow.self     { fill: var(--loop); stroke: var(--loop); }
 
 .loop-badge {
   font-family: var(--font-mono); font-size: 9.5px; font-weight: 600;
   fill: #fff; letter-spacing: 0.5px;
 }
+
+/* 判断节点（菱形）——回路收口处的控制流判断 */
+.node-diamond { fill: var(--paper-2); stroke-width: 1.6; transition: fill .18s ease; }
+.node.node-decision:hover .node-diamond { fill: var(--paper-3); }
+.node-decision .n-dec-title { font-family: var(--font-body); font-weight: 600; font-size: 12.5px; fill: var(--ink); }
+.node-decision .n-dec-cond { font-family: var(--font-mono); font-size: 9px; fill: var(--ink-soft); }
+.node-decision .n-dec-cap { font-family: var(--font-mono); font-size: 9px; font-weight: 600; fill: #fff; letter-spacing: 0.5px; }
+
+/* 边标签（是 / 否 · 回退条件）：stroke 描边出纸底色，压住下方的线 */
+.edge-label { font-family: var(--font-mono); font-size: 10px; fill: var(--ink-soft); paint-order: stroke; stroke: var(--paper); stroke-width: 3px; }
+.edge-label.backedge { fill: #a63a2b; }
+.edge-label.debate { fill: #8f651d; }
+.edge-label.self { fill: #6f427f; }
+
+/* 图例：菱形判断 / 回边样式 */
+.sw-decision { background: none !important; border: 2px solid #8f651d; transform: rotate(45deg) scale(.75); }
+.sw-loop { background: repeating-linear-gradient(90deg, #a63a2b 0 4px, transparent 4px 7px); }
 
 /* ============ 详情抽屉 ============ */
 .drawer {
@@ -714,6 +733,9 @@ function setDrawer(step) {
   $("#drawerMask").classList.toggle("show", open);
   if (!step) return;
 
+  // 判断节点（回路收口处的控制流判断）：专属面板
+  if (step.__decision) { setDecisionDrawer(step.__decision); return; }
+
   $("#dSw").style.background = catColor(step.category);
   $("#dTitle").textContent = `${step.order} · ${step.role_cn || step.role}`;
   $("#dRole").textContent = step.role;
@@ -789,6 +811,55 @@ function setDrawer(step) {
       });
     });
   });
+}
+
+/* 判断节点抽屉：判什么 / 满足走哪 / 不满足退到哪 / 最多几次 */
+function setDecisionDrawer(dec) {
+  const color = DEC_COLOR[dec.mode] || "#7f8880";
+  $("#dSw").style.background = color;
+  $("#dTitle").textContent = dec.title;
+  const modeCn = { backedge: "回退", debate: "辩论", self: "自迭代" }[dec.mode] || dec.mode;
+  const stepNames = (dec.stepRef && Array.isArray(dec.stepRef))
+    ? dec.stepRef.map(s => s.order).join("、")                // debate 组
+    : (dec.stepRef ? dec.stepRef.order : "");                 // 单步骤
+  $("#dRole").textContent = `${modeCn}回路 · 收口于 ${stepNames}`;
+  $("#dTags").innerHTML = `<span class="d-tag loop" style="background:${color}22;color:${color}">◇ ${DEC_MODE_CN[dec.mode] || "判断"}</span>`;
+
+  const backToCn = (dec.backTo || []).length
+    ? dec.backTo.map(id => {
+        const st = displayG && displayG.steps.find(s => s.id === id);
+        return st ? `${st.order}（${st.role_cn || st.role}）` : id;
+      }).join("、")
+    : "（无）";
+
+  const parts = [];
+  parts.push(`<div class="d-section">
+    <h3>判断内容</h3>
+    <div class="prompt-box">${esc(dec.condition)}</div>
+  </div>`);
+  parts.push(`<div class="d-section">
+    <h3>满足（是）</h3>
+    <div class="contract-box" style="border-left:3px solid var(--ok)">${esc(dec.yes)}</div>
+  </div>`);
+  parts.push(`<div class="d-section">
+    <h3>不满足（否）</h3>
+    <div class="contract-box" style="border-left:3px solid ${color}">${esc(dec.no)}</div>
+  </div>`);
+  parts.push(`<div class="d-section">
+    <h3>回退目标</h3>
+    <div class="contract-box">${esc(backToCn)}</div>
+  </div>`);
+  parts.push(`<div class="d-section">
+    <h3>轮次上限</h3>
+    <div class="contract-box">最多 ${dec.maxRounds} 次；触顶即强制停止，宁可在成品里如实交代「未收敛 / 修正未达标」，也不死循环。</div>
+  </div>`);
+  if (dec.mode === "backedge" && (dec.loopRef.affected_downstream || []).length) {
+    parts.push(`<div class="d-section">
+      <h3>回退后串行重跑的下游</h3>
+      <div class="contract-box">${esc(dec.loopRef.affected_downstream.join("、"))}</div>
+    </div>`);
+  }
+  $("#dBody").innerHTML = parts.join("");
 }
 
 /* ============================ Markdown 渲染（轻量） ============================ */
@@ -873,6 +944,7 @@ function inline(txt) {
 /* ============================ DAG 布局（上→下 垂直流程图 + 重心法减少交叉） ============================ */
 let dagPos = null;          // 当前渲染的节点位置（供拖拽/自动重排使用）
 let dagDims = null;         // 当前画布尺寸
+let displayG = null;        // 浏览视图当前渲染的展示图（含判断节点），供交互使用
 
 function computeLayout(steps, edges) {
   const idIndex = {}; steps.forEach(s => { idIndex[s.id] = s; });
@@ -963,7 +1035,7 @@ function computeLayout(steps, edges) {
   return { pos, width, height, NODE_W, NODE_H };
 }
 
-function drawEdges(svg, edges, pos, NODE_W, NODE_H, loopEdges) {
+function drawEdges(svg, edges, pos, NODE_W, NODE_H, loopEdges, decById) {
   // 清除旧边层，重新绘制（拖拽/重排时调用）
   const old = svg.querySelector(".edge-layer");
   if (old) old.remove();
@@ -982,13 +1054,23 @@ function drawEdges(svg, edges, pos, NODE_W, NODE_H, loopEdges) {
     }
   });
 
-  const _mkPath = (from, to, cls, strokeColor) => {
+  // label: {text, cls, anchor} —— 画在源节点正下方，是/否 分居连线两侧
+  const _mkPath = (from, to, cls, strokeColor, label) => {
     const a = pos[from], b = pos[to];
     if (!a || !b) return;
-    const x1 = a.x + NODE_W / 2, y1 = a.y + NODE_H;
-    const x2 = b.x + NODE_W / 2, y2 = b.y;
-    const midY = (y1 + y2) / 2;
-    const d = `M ${x1} ${y1} V ${midY} H ${x2} V ${y2}`;
+    const ax = a.x + NODE_W / 2, bx = b.x + NODE_W / 2;
+    let d, arrowPts;
+    if (b.y >= a.y) {
+      // 下行（前向边）：源底部 -> 目标顶部
+      const y1 = a.y + NODE_H, y2 = b.y, midY = (y1 + y2) / 2;
+      d = `M ${ax} ${y1} V ${midY} H ${bx} V ${y2}`;
+      arrowPts = `${bx - 4},${y2 - 7} ${bx + 4},${y2 - 7} ${bx},${y2}`;
+    } else {
+      // 上行（回边，目标在更早的层）：源底部下垂绕行，从目标底部向上进入
+      const y1 = a.y + NODE_H, y2 = b.y + NODE_H, dropY = y1 + 24;
+      d = `M ${ax} ${y1} V ${dropY} H ${bx} V ${y2}`;
+      arrowPts = `${bx - 4},${y2 + 7} ${bx + 4},${y2 + 7} ${bx},${y2}`;
+    }
     const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
     path.setAttribute("d", d);
     path.setAttribute("class", cls);
@@ -996,119 +1078,289 @@ function drawEdges(svg, edges, pos, NODE_W, NODE_H, loopEdges) {
     path.dataset.from = from; path.dataset.to = to;
 
     const arrow = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
-    const al = 7;
-    arrow.setAttribute("points", `${x2 - al*0.6},${y2 - al} ${x2 + al*0.6},${y2 - al} ${x2},${y2}`);
+    arrow.setAttribute("points", arrowPts);
     const isLoop = cls.includes("edge-loop");
-    const kindCls = cls.includes("backedge") ? "backedge" : cls.includes("debate") ? "debate" : "";
+    const kindCls = cls.includes("backedge") ? "backedge" : cls.includes("debate") ? "debate" : cls.includes("self") ? "self" : "";
     arrow.setAttribute("class", isLoop ? "edge-arrow edge-loop-arrow " + kindCls : "edge-arrow");
     if (isLoop && strokeColor) arrow.setAttribute("fill", strokeColor);
     edgeLayer.appendChild(path);
     edgeLayer.appendChild(arrow);
+
+    if (label) {
+      const t = document.createElementNS("http://www.w3.org/2000/svg", "text");
+      t.setAttribute("x", ax + (label.anchor === "end" ? -6 : 6));
+      t.setAttribute("y", a.y + NODE_H + 15);
+      t.setAttribute("text-anchor", label.anchor || "start");
+      t.setAttribute("class", "edge-label" + (label.cls ? " " + label.cls : ""));
+      t.textContent = label.text;
+      edgeLayer.appendChild(t);
+    }
   };
-  // 前向依赖边
-  edges.forEach((e) => { const [from, to] = e; _mkPath(from, to, "edge"); });
-  // 回路边（回退/辩论）：画在普通边之上，用独立 class 区分样式；
+  // 前向依赖边；判断节点的出边 = 「是」分支，带标签
+  edges.forEach((e) => {
+    const [from, to] = e;
+    const fromDec = decById && decById[from];
+    _mkPath(from, to, "edge", null, fromDec ? { text: "是", anchor: "end" } : null);
+  });
+  // 回路边（回退/辩论/自迭代）= 「否」分支：画在普通边之上，带条件与轮次标签；
   // 若带 group，用「group→稳定色」区分同一方案里的多个独立回路，避免混成一团。
   (loopEdges || []).forEach((e) => {
     const strokeColor = e.kind === "debate" ? (groupColor[e.group] || undefined) : undefined;
-    _mkPath(e.from, e.to, `edge edge-loop ${e.kind}`, strokeColor);
+    _mkPath(e.from, e.to, `edge edge-loop ${e.kind}`, strokeColor,
+      e.label ? { text: e.label, anchor: "start", cls: e.kind } : null);
   });
   // 边层插到最前（节点之下）
   svg.insertBefore(edgeLayer, svg.firstChild);
 }
 
-function renderDag(steps, edges, svgId = "#dag", interactive = true, loopEdges) {
+/* ============================ 展示图：步骤节点 + 判断节点 ============================ */
+/* 把 parse_case 的 {steps, loop} 翻译成带控制流语义的展示图：
+   每个启用的回路（self / debate / backedge）在其收口处插入一个菱形「判断节点」——
+   满足条件走「是」前向边继续；不满足走「否」回边回到目标步骤；
+   边上标注判断内容与轮次上限，点节点可见完整语义（判什么、退到哪、几轮封顶）。 */
+
+const DEC_COLOR = { backedge: "#a63a2b", debate: "#b5832f", self: "#a673b5" };
+const DEC_MODE_CN = { backedge: "回退判断", debate: "辩论收敛判断", self: "迭代收敛判断" };
+
+function buildDisplayGraph(steps) {
+  const idSet = new Set(steps.map(s => s.id));
+  const nodes = steps.map(s => ({ kind: "step", id: s.id, step: s }));
+  const decById = {};
+  const deps = {}; // 展示图层叠依赖（初始 = steps 的 depends_on）
+  steps.forEach(s => { deps[s.id] = (s.depends_on || []).filter(d => idSet.has(d)); });
+
+  const addDec = (dec) => { nodes.push(dec); decById[dec.id] = dec; deps[dec.id] = dec._deps; };
+
+  // debate 回路按 partners 集合分组：同一组共用一个判断节点和一个轮次计数器
+  const debateGroups = new Map();
+  steps.forEach(s => {
+    const lp = s.loop || {};
+    if (!lp.enabled || lp.mode !== "debate") return;
+    const partners = [...new Set(lp.partners || [])].filter(p => idSet.has(p));
+    const key = partners.length ? partners.slice().sort().join("|") : "solo:" + s.id;
+    if (!debateGroups.has(key)) debateGroups.set(key, { partners: partners.length ? partners : [s.id], members: [] });
+    debateGroups.get(key).members.push(s);
+  });
+
+  // stepId -> 其输出所经过的判断节点（用于把下游依赖改接到判断节点之后）
+  const outDec = {};
+
+  steps.forEach(s => {
+    const lp = s.loop || {};
+    if (!lp.enabled) return;
+    if (lp.mode === "self") {
+      const did = "dec-self-" + s.id;
+      addDec({
+        kind: "decision", id: did, mode: "self", _deps: [s.id],
+        title: `${s.order} 已收敛？`,
+        condition: lp.converge_when || "产出满足该步骤的输出契约",
+        yes: "已收敛（或达上限）：取当前最优产出，继续下游",
+        no: `未收敛且未达上限：把上一轮产出作为输入，回到 ${s.order} 再迭代一轮`,
+        backTo: [s.id], maxRounds: lp.max_rounds, loopRef: lp, stepRef: s,
+      });
+      outDec[s.id] = did;
+    } else if (lp.mode === "backedge") {
+      const backTo = (lp.partners || []).filter(p => idSet.has(p));
+      const did = "dec-back-" + s.id;
+      addDec({
+        kind: "decision", id: did, mode: "backedge", _deps: [s.id],
+        title: `${s.order} 上游产出合格？`,
+        condition: lp.fix || "上游产出满足本步骤的输入要求",
+        yes: "合格：本步产出直接进入下游",
+        no: `不合格：回退 ${backTo.join("、") || "上游"} 重跑；受影响下游串行重跑：${(lp.affected_downstream || []).join("、") || s.order}`,
+        backTo, maxRounds: lp.max_rounds, loopRef: lp, stepRef: s,
+      });
+      outDec[s.id] = did;
+    }
+  });
+
+  debateGroups.forEach(g => {
+    const first = g.members[0];
+    const lp = first.loop;
+    const did = "dec-debate-" + (lp.group || first.id);
+    addDec({
+      kind: "decision", id: did, mode: "debate", _deps: g.partners,
+      title: "辩论收敛？",
+      condition: lp.converge_when || "各方证据不再新增 / 立场连续无实质变化",
+      yes: "已收敛（或达上限）：停止攻防，由收口角色基于各方最终论据裁决",
+      no: "未收敛且未达上限：各方论点/证据交叉喂回，进入下一轮攻防（全组共用一个轮次计数器）",
+      backTo: g.partners, maxRounds: lp.max_rounds, loopRef: lp,
+      stepRef: g.members,
+    });
+    [...new Set([...g.partners, ...g.members.map(m => m.id)])].forEach(id => { outDec[id] = did; });
+  });
+
+  // 下游改接：依赖「输出经过判断节点」的步骤的节点，改为依赖该判断节点。
+  // 例外：判断节点自身依赖该节点（辩论组内互依）时保留原边，避免成环。
+  nodes.forEach(n => {
+    if (n.kind === "decision") return;
+    deps[n.id] = deps[n.id].map(d => {
+      const dec = outDec[d];
+      if (dec && dec !== n.id && !(decById[dec]._deps || []).includes(n.id)) return dec;
+      return d;
+    });
+  });
+
+  // 前向边（判断节点的出边 = 「是」分支）
+  const forwardEdges = [];
+  nodes.forEach(n => (deps[n.id] || []).forEach(d => forwardEdges.push([d, n.id])));
+
+  // 回边（「否」分支）
+  const loopEdges = [];
+  Object.values(decById).forEach(dec => {
+    const verb = dec.mode === "backedge" ? "回退重跑" : dec.mode === "debate" ? "下一轮攻防" : "再迭代";
+    (dec.backTo || []).forEach(t => {
+      loopEdges.push({ from: dec.id, to: t, kind: dec.mode, group: (dec.loopRef || {}).group,
+        label: `否 · ${verb} ≤${dec.maxRounds}次` });
+    });
+  });
+
+  return { nodes, deps, decById, forwardEdges, loopEdges, steps };
+}
+
+function renderDag(data, svgId = "#dag", interactive = true) {
   const svg = $(svgId);
   svg.innerHTML = "";
+  const steps = data.steps || [];
   if (!steps.length) return;
 
-  const { pos, width, height, NODE_W, NODE_H } = computeLayout(steps, edges);
+  const g = buildDisplayGraph(steps);
+  if (interactive) displayG = g; // 供交互（高亮/选中/拖拽连线/重排）使用
+
+  const layoutNodes = g.nodes.map(n => ({ id: n.id, depends_on: g.deps[n.id] || [] }));
+  const { pos, width, height, NODE_W, NODE_H } = computeLayout(layoutNodes, g.forwardEdges);
   dagPos = pos; dagDims = { width, height, NODE_W, NODE_H };
   svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
   svg.setAttribute("width", width);
   svg.setAttribute("height", height);
 
-  const idIndex = {};
-  steps.forEach(s => idIndex[s.id] = s);
-
   // ---- 边（画在节点下方）----
-  drawEdges(svg, edges, pos, NODE_W, NODE_H, loopEdges);
+  drawEdges(svg, g.forwardEdges, pos, NODE_W, NODE_H, g.loopEdges, g.decById);
 
   // ---- 节点 ----
-  steps.forEach((s, i) => {
-    const p = pos[s.id];
-    const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
-    g.setAttribute("class", "node");
-    g.dataset.id = s.id;
-    g.dataset.role = s.role || "";
-    g.dataset.order = s.order || "";
-    g.style.animationDelay = `${10 + p.y * 0.8}ms`;
-    g.setAttribute("transform", `translate(${p.x}, ${p.y})`);
-
-    const acc = catColor(s.category);
-    // 主体卡片
-    const card = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-    card.setAttribute("class", "node-card");
-    card.setAttribute("width", NODE_W);
-    card.setAttribute("height", NODE_H);
-    // accent 色条（左侧）
-    const bar = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-    bar.setAttribute("class", "node-accent");
-    bar.setAttribute("x", 0); bar.setAttribute("y", 0);
-    bar.setAttribute("width", 5); bar.setAttribute("height", NODE_H);
-    bar.setAttribute("rx", 3);
-    bar.setAttribute("fill", acc);
-
-    // 文字
-    const orderT = textEl("10", 16, "#8a9187", "n-order");
-    orderT.setAttribute("text-anchor", "start");
-    orderT.textContent = s.order;
-
-    const roleCn = textEl("13.5", 40, "#1f2d2a", "n-rolecn");
-    roleCn.setAttribute("font-weight", "600");
-    roleCn.textContent = s.role_cn || s.role;
-
-    const roleId = textEl("9.5", 58, "#40504c", "n-role");
-    roleId.textContent = truncate(s.role, 26);
-
-    g.appendChild(card);
-    g.appendChild(bar);
-    g.appendChild(orderT); g.appendChild(roleCn); g.appendChild(roleId);
-
-    // 状态小圆点（右上角）
-    if (s.status === "success") {
-      const dot = circleEl(NODE_W - 16, 12, 4, "#4d8a5a");
-      g.appendChild(dot);
-    } else if (s.status) {
-      const dot = circleEl(NODE_W - 16, 12, 4, "#b04a3c");
-      g.appendChild(dot);
-    }
-
-    // 循环徽章（置于节点上方，避免与底部连线重叠）
-    if (s.loop.enabled) {
-      const mode = s.loop.mode || "self";
-      const modeLabel = { self: "自迭代", debate: "辩论", backedge: "回退" }[mode] || mode;
-      const modeColor = mode === "debate" ? "#b5832f" : mode === "backedge" ? "#a63a2b" : "#a673b5";
-      const bg = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-      bg.setAttribute("x", NODE_W - 74); bg.setAttribute("y", -25);
-      bg.setAttribute("width", 74); bg.setAttribute("height", 18);
-      bg.setAttribute("rx", 9); bg.setAttribute("fill", modeColor);
-      const lb = textEl("9.5", -10, "#fff", "loop-badge");
-      lb.setAttribute("x", NODE_W - 37); lb.setAttribute("text-anchor", "middle");
-      lb.textContent = `↻ ${modeLabel}·${s.loop.max_rounds}`;
-      g.appendChild(bg); g.appendChild(lb);
-    }
-
-    if (interactive) {
-      // 选中逻辑改由 bindDagInteractions 的拖拽/点击区分处理，这里只保留 hover 高亮
-      g.addEventListener("mouseenter", () => highlight(s.id));
-      g.addEventListener("mouseleave", () => clearHighlight());
-    }
-
-    svg.appendChild(g);
+  g.nodes.forEach(n => {
+    const p = pos[n.id];
+    if (n.kind === "decision") drawDecisionNode(svg, n, p, NODE_W, NODE_H, interactive);
+    else drawStepNode(svg, n.step, p, NODE_W, NODE_H, interactive);
   });
 
   if (interactive) bindDagInteractions();
+}
+
+function drawStepNode(svg, s, p, NODE_W, NODE_H, interactive) {
+  const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+  g.setAttribute("class", "node");
+  g.dataset.id = s.id;
+  g.dataset.role = s.role || "";
+  g.dataset.order = s.order || "";
+  g.style.animationDelay = `${10 + p.y * 0.8}ms`;
+  g.setAttribute("transform", `translate(${p.x}, ${p.y})`);
+
+  const acc = catColor(s.category);
+  // 主体卡片
+  const card = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+  card.setAttribute("class", "node-card");
+  card.setAttribute("width", NODE_W);
+  card.setAttribute("height", NODE_H);
+  // accent 色条（左侧）
+  const bar = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+  bar.setAttribute("class", "node-accent");
+  bar.setAttribute("x", 0); bar.setAttribute("y", 0);
+  bar.setAttribute("width", 5); bar.setAttribute("height", NODE_H);
+  bar.setAttribute("rx", 3);
+  bar.setAttribute("fill", acc);
+
+  // 文字
+  const orderT = textEl("10", 16, "#8a9187", "n-order");
+  orderT.setAttribute("text-anchor", "start");
+  orderT.textContent = s.order;
+
+  const roleCn = textEl("13.5", 40, "#1f2d2a", "n-rolecn");
+  roleCn.setAttribute("font-weight", "600");
+  roleCn.textContent = s.role_cn || s.role;
+
+  const roleId = textEl("9.5", 58, "#40504c", "n-role");
+  roleId.textContent = truncate(s.role, 26);
+
+  g.appendChild(card);
+  g.appendChild(bar);
+  g.appendChild(orderT); g.appendChild(roleCn); g.appendChild(roleId);
+
+  // 状态小圆点（右上角）
+  if (s.status === "success") {
+    const dot = circleEl(NODE_W - 16, 12, 4, "#4d8a5a");
+    g.appendChild(dot);
+  } else if (s.status) {
+    const dot = circleEl(NODE_W - 16, 12, 4, "#b04a3c");
+    g.appendChild(dot);
+  }
+
+  // 循环徽章（置于节点上方，避免与底部连线重叠）
+  if (s.loop && s.loop.enabled) {
+    const mode = s.loop.mode || "self";
+    const modeLabel = { self: "自迭代", debate: "辩论", backedge: "回退" }[mode] || mode;
+    const modeColor = DEC_COLOR[mode] || "#a673b5";
+    const bg = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+    bg.setAttribute("x", NODE_W - 74); bg.setAttribute("y", -25);
+    bg.setAttribute("width", 74); bg.setAttribute("height", 18);
+    bg.setAttribute("rx", 9); bg.setAttribute("fill", modeColor);
+    const lb = textEl("9.5", -10, "#fff", "loop-badge");
+    lb.setAttribute("x", NODE_W - 37); lb.setAttribute("text-anchor", "middle");
+    lb.textContent = `↻ ${modeLabel}·${s.loop.max_rounds}`;
+    g.appendChild(bg); g.appendChild(lb);
+  }
+
+  if (interactive) {
+    // 选中逻辑改由 bindDagInteractions 的拖拽/点击区分处理，这里只保留 hover 高亮
+    g.addEventListener("mouseenter", () => highlight(s.id));
+    g.addEventListener("mouseleave", () => clearHighlight());
+  }
+
+  svg.appendChild(g);
+}
+
+function drawDecisionNode(svg, n, p, NODE_W, NODE_H, interactive) {
+  const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+  g.setAttribute("class", "node node-decision");
+  g.dataset.id = n.id;
+  g.dataset.decision = n.mode;
+  g.style.animationDelay = `${10 + p.y * 0.8}ms`;
+  g.setAttribute("transform", `translate(${p.x}, ${p.y})`);
+
+  const color = DEC_COLOR[n.mode] || "#7f8880";
+  // 菱形主体（占满节点框）
+  const poly = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
+  poly.setAttribute("class", "node-diamond");
+  poly.setAttribute("points", `${NODE_W / 2},0 ${NODE_W},${NODE_H / 2} ${NODE_W / 2},${NODE_H} 0,${NODE_H / 2}`);
+  poly.setAttribute("stroke", color);
+  g.appendChild(poly);
+
+  // 标题（判断的问题）
+  const title = textEl("12.5", NODE_H / 2 - 6, "#1f2d2a", "n-dec-title");
+  title.setAttribute("x", NODE_W / 2); title.setAttribute("text-anchor", "middle");
+  title.textContent = n.title;
+  // 判断条件（摘要，全文在抽屉）
+  const cond = textEl("9", NODE_H / 2 + 13, "#40504c", "n-dec-cond");
+  cond.setAttribute("x", NODE_W / 2); cond.setAttribute("text-anchor", "middle");
+  cond.textContent = truncate(n.condition, 16);
+  g.appendChild(title); g.appendChild(cond);
+
+  // 轮次上限徽章（菱形上方顶点处）
+  const capBg = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+  capBg.setAttribute("x", NODE_W / 2 - 40); capBg.setAttribute("y", -22);
+  capBg.setAttribute("width", 80); capBg.setAttribute("height", 16);
+  capBg.setAttribute("rx", 8); capBg.setAttribute("fill", color);
+  const cap = textEl("9", -10.5, "#fff", "n-dec-cap");
+  cap.setAttribute("x", NODE_W / 2); cap.setAttribute("text-anchor", "middle");
+  cap.textContent = `≤${n.maxRounds}次封顶`;
+  g.appendChild(capBg); g.appendChild(cap);
+
+  if (interactive) {
+    g.addEventListener("mouseenter", () => highlight(n.id));
+    g.addEventListener("mouseleave", () => clearHighlight());
+  }
+
+  svg.appendChild(g);
 }
 
 function textEl(size, y, fill, cls) {
@@ -1196,7 +1448,7 @@ function setupDragListeners(svg) {
     const nx = p.x + dx, ny = p.y + dy;
     dagPos[id] = { x: nx, y: ny };
     nodeEl.setAttribute("transform", `translate(${nx}, ${ny})`);
-    drawEdges(svg, currentData.edges, dagPos, dagDims.NODE_W, dagDims.NODE_H, currentData.loop_edges);
+    if (displayG) drawEdges(svg, displayG.forwardEdges, dagPos, dagDims.NODE_W, dagDims.NODE_H, displayG.loopEdges, displayG.decById);
     fitToContent(svg, dagDims.NODE_W, dagDims.NODE_H);
   });
   document.addEventListener("mouseup", (ev) => {
@@ -1222,8 +1474,8 @@ function bindDagInteractions() {
 
 function highlight(id) {
   if (selectedId) return; // 选中时不响应 hover 干扰
-  const up = collectUpstream(id, currentData.edges);
-  const down = collectDownstream(id, currentData.edges);
+  const up = collectUpstream(id, displayG.forwardEdges);
+  const down = collectDownstream(id, displayG.forwardEdges);
   const related = new Set([...up, ...down]);
   $("#dag").querySelectorAll(".node").forEach(el => {
     el.classList.toggle("dimmed", !related.has(el.dataset.id));
@@ -1256,9 +1508,9 @@ function selectNode(id) {
     el.classList.toggle("dimmed", !(isIn || isOut));
   });
 
-  // 打开抽屉
-  const step = currentData.steps.find(s => s.id === id);
-  setDrawer(step);
+  // 打开抽屉：判断节点有专属面板，步骤节点沿用原抽屉
+  const dec = displayG && displayG.decById[id];
+  setDrawer(dec ? { __decision: dec } : (currentData.steps.find(s => s.id === id) || null));
 }
 
 function deselect() {
@@ -1281,13 +1533,18 @@ function renderKpis(meta) {
 
 function renderLegend(steps) {
   const cats = [...new Set(steps.map(s => s.category).filter(Boolean))];
+  const hasLoop = steps.some(s => s.loop && s.loop.enabled);
   $("#legend").innerHTML = cats.map(c => `
-    <div class="legend-item"><span class="sw" style="background:${catColor(c)}"></span>${CAT_CN[c] || c}</div>`).join("");
+    <div class="legend-item"><span class="sw" style="background:${catColor(c)}"></span>${CAT_CN[c] || c}</div>`).join("")
+    + (hasLoop ? `
+    <div class="legend-item"><span class="sw sw-decision"></span>回路判断</div>
+    <div class="legend-item"><span class="sw sw-loop"></span>否·回退边</div>` : "");
 }
 
 function resetDagLayout() {
-  if (!currentData || !currentData.steps.length) return;
-  const { pos, width, height, NODE_W, NODE_H } = computeLayout(currentData.steps, currentData.edges);
+  if (!currentData || !currentData.steps.length || !displayG) return;
+  const layoutNodes = displayG.nodes.map(n => ({ id: n.id, depends_on: displayG.deps[n.id] || [] }));
+  const { pos, width, height, NODE_W, NODE_H } = computeLayout(layoutNodes, displayG.forwardEdges);
   dagPos = pos; dagDims = { width, height, NODE_W, NODE_H };
   const svg = $("#dag");
   svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
@@ -1297,7 +1554,7 @@ function resetDagLayout() {
     const p = pos[nodeEl.dataset.id];
     if (p) nodeEl.setAttribute("transform", `translate(${p.x}, ${p.y})`);
   });
-  drawEdges(svg, currentData.edges, pos, NODE_W, NODE_H, currentData.loop_edges);
+  drawEdges(svg, displayG.forwardEdges, pos, NODE_W, NODE_H, displayG.loopEdges, displayG.decById);
 }
 
 async function selectCase(dir, itemEl) {
@@ -1332,7 +1589,7 @@ async function selectCase(dir, itemEl) {
   }
   renderKpis(currentData.case.meta);
   renderLegend(currentData.steps);
-  renderDag(currentData.steps, currentData.edges, "#dag", true, currentData.loop_edges);
+  renderDag(currentData, "#dag", true);
   setDrawer(null);
 
   $("#loading").style.display = "none";
@@ -1594,7 +1851,7 @@ function tsToEpoch(ts) {
 
 function renderLiveDag(data) {
   $("#dagHint").style.display = "none";
-  renderDag(data.steps, data.edges, "#liveDag", false, data.loop_edges);
+  renderDag(data, "#liveDag", false);
   // 若已有已调度角色，补点亮
   document.querySelectorAll("#liveDag .node").forEach(node => {
     const step = data.steps.find(s => s.role === node.dataset.role);
