@@ -1054,22 +1054,63 @@ function drawEdges(svg, edges, pos, NODE_W, NODE_H, loopEdges, decById) {
     }
   });
 
-  // label: {text, cls, anchor} —— 画在源节点正下方，是/否 分居连线两侧
-  const _mkPath = (from, to, cls, strokeColor, label) => {
+  /* ---- 通用防重合三件套（正交连线的标准做法）----
+     1) 端口分散：同一节点同侧的多条边（bottom 侧 = 前向出边 + 回边出入；top 侧 = 前向入边）
+        在节点边缘按序均匀错开出入点，不共用节点中点——否则「是/否」两条边、
+        目标节点的出入边会在中点完全重合；
+     2) 通道错层：每条回边的水平绕行通道按序逐层加深（bus lanes），多条回边不共线；
+     3) 中继微错：同层前向边的中继高度按边序错开，水平段不共线。 */
+  const bottomList = {}, topList = {};
+  edges.forEach(([f, t]) => {
+    (bottomList[f] = bottomList[f] || []).push({ role: "fwd-out", f, t });
+    (topList[t] = topList[t] || []).push({ role: "fwd-in", f, t });
+  });
+  (loopEdges || []).forEach(e => {
+    (bottomList[e.from] = bottomList[e.from] || []).push({ role: "loop-out", e });
+    (bottomList[e.to] = bottomList[e.to] || []).push({ role: "loop-in", e });
+  });
+  const PORT_SPAN = NODE_W / 2 - 16; // 端口分布在节点中轴 ±SPAN 内
+  const spread = (n) => (n <= 1 ? [0] : Array.from({ length: n }, (_, i) => -1 + (2 * i) / (n - 1)));
+  const fwdOutOff = new Map(), fwdInOff = new Map(), loopOutOff = new Map(), loopInOff = new Map();
+  Object.values(bottomList).forEach((list) => {
+    const ss = spread(list.length);
+    list.forEach((p, i) => {
+      const off = ss[i] * PORT_SPAN;
+      if (p.role === "fwd-out") fwdOutOff.set(p.f + "=>" + p.t, off);
+      else if (p.role === "loop-out") loopOutOff.set(p.e, off);
+      else loopInOff.set(p.e, off);
+    });
+  });
+  Object.values(topList).forEach((list) => {
+    const ss = spread(list.length);
+    list.forEach((p, i) => fwdInOff.set(p.f + "=>" + p.t, ss[i] * PORT_SPAN));
+  });
+
+  const LOOP_LANE_GAP = 20; // 回边水平通道的层间距
+  const FWD_JITTER = 12;    // 前向边中继高度的微错开幅度
+
+  const _mkPath = (from, to, cls, strokeColor, opts) => {
     const a = pos[from], b = pos[to];
     if (!a || !b) return;
-    const ax = a.x + NODE_W / 2, bx = b.x + NODE_W / 2;
-    let d, arrowPts;
-    if (b.y >= a.y) {
-      // 下行（前向边）：源底部 -> 目标顶部
-      const y1 = a.y + NODE_H, y2 = b.y, midY = (y1 + y2) / 2;
+    let d, arrowPts, labelX, labelY, labelAnchor;
+    if (!opts.up) {
+      // 下行（前向边）：源底部端口 -> 目标顶部端口
+      const ax = a.x + NODE_W / 2 + (fwdOutOff.get(from + "=>" + to) || 0);
+      const bx = b.x + NODE_W / 2 + (fwdInOff.get(from + "=>" + to) || 0);
+      const y1 = a.y + NODE_H, y2 = b.y;
+      const midY = (y1 + y2) / 2 + (opts.jitter || 0);
       d = `M ${ax} ${y1} V ${midY} H ${bx} V ${y2}`;
       arrowPts = `${bx - 4},${y2 - 7} ${bx + 4},${y2 - 7} ${bx},${y2}`;
+      labelX = ax - 6; labelY = y1 + 14; labelAnchor = "end";
     } else {
-      // 上行（回边，目标在更早的层）：源底部下垂绕行，从目标底部向上进入
-      const y1 = a.y + NODE_H, y2 = b.y + NODE_H, dropY = y1 + 24;
+      // 上行（回边）：源底部端口下垂绕行，从目标底部端口向上进入
+      const ax = a.x + NODE_W / 2 + (loopOutOff.get(opts.edge) || 0);
+      const bx = b.x + NODE_W / 2 + (loopInOff.get(opts.edge) || 0);
+      const y1 = a.y + NODE_H, y2 = b.y + NODE_H;
+      const dropY = y1 + 26 + (opts.lane || 0) * LOOP_LANE_GAP;
       d = `M ${ax} ${y1} V ${dropY} H ${bx} V ${y2}`;
       arrowPts = `${bx - 4},${y2 + 7} ${bx + 4},${y2 + 7} ${bx},${y2}`;
+      labelX = ax + 6; labelY = dropY - 6; labelAnchor = "start";
     }
     const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
     path.setAttribute("d", d);
@@ -1086,28 +1127,32 @@ function drawEdges(svg, edges, pos, NODE_W, NODE_H, loopEdges, decById) {
     edgeLayer.appendChild(path);
     edgeLayer.appendChild(arrow);
 
-    if (label) {
+    if (opts.label) {
       const t = document.createElementNS("http://www.w3.org/2000/svg", "text");
-      t.setAttribute("x", ax + (label.anchor === "end" ? -6 : 6));
-      t.setAttribute("y", a.y + NODE_H + 15);
-      t.setAttribute("text-anchor", label.anchor || "start");
-      t.setAttribute("class", "edge-label" + (label.cls ? " " + label.cls : ""));
-      t.textContent = label.text;
+      t.setAttribute("x", labelX);
+      t.setAttribute("y", labelY);
+      t.setAttribute("text-anchor", labelAnchor);
+      t.setAttribute("class", "edge-label" + (opts.label.cls ? " " + opts.label.cls : ""));
+      t.textContent = opts.label.text;
       edgeLayer.appendChild(t);
     }
   };
-  // 前向依赖边；判断节点的出边 = 「是」分支，带标签
-  edges.forEach((e) => {
+  // 前向依赖边；判断节点的出边 = 「是」分支，带标签；中继高度按边序微错开
+  edges.forEach((e, i) => {
     const [from, to] = e;
     const fromDec = decById && decById[from];
-    _mkPath(from, to, "edge", null, fromDec ? { text: "是", anchor: "end" } : null);
+    _mkPath(from, to, "edge", null, {
+      jitter: ((i % 3) - 1) * FWD_JITTER,
+      label: fromDec ? { text: "是", cls: null } : null,
+    });
   });
-  // 回路边（回退/辩论/自迭代）= 「否」分支：画在普通边之上，带条件与轮次标签；
-  // 若带 group，用「group→稳定色」区分同一方案里的多个独立回路，避免混成一团。
-  (loopEdges || []).forEach((e) => {
+  // 回路边（回退/辩论/自迭代）= 「否」分支：水平通道按序错层，带条件与轮次标签
+  (loopEdges || []).forEach((e, idx) => {
     const strokeColor = e.kind === "debate" ? (groupColor[e.group] || undefined) : undefined;
-    _mkPath(e.from, e.to, `edge edge-loop ${e.kind}`, strokeColor,
-      e.label ? { text: e.label, anchor: "start", cls: e.kind } : null);
+    _mkPath(e.from, e.to, `edge edge-loop ${e.kind}`, strokeColor, {
+      up: true, lane: idx, edge: e,
+      label: e.label ? { text: e.label, cls: e.kind } : null,
+    });
   });
   // 边层插到最前（节点之下）
   svg.insertBefore(edgeLayer, svg.firstChild);
