@@ -1543,36 +1543,43 @@ function handleLogEvent(payload) {
   }
 }
 
-/* 轮询 cases：检测新 case + 读取方案 JSON 渲染实时 DAG */
+/* 轮询 cases：检测本次编排的 case 目录 + 读取方案 JSON 渲染实时 DAG */
 async function pollForCase() {
+  if (composeState.liveData) return; // 已渲染，不再轮询
   try {
     const cases = await loadCases();
-    // 识别本次编排的 case 目录，两条路径互补：
+    // 收集候选目录，两条来源互补：
     // 1. 增量检测：不在 casesBefore 基线里的新目录（常规场景）
     // 2. 时间戳归属：目录名里的 YYYYMMDD-HHMMSS ≥ run 启动时间的已有目录
-    //    ——覆盖「刷新恢复」场景：设计已落盘、目录已建，但刷新后它已在基线里，
-    //    增量检测永远抓不到，只能按时间归属识别
-    let found = null;
-    for (const c of cases) {
-      if (!composeState.casesBefore.has(c.dir)) { found = c.dir; break; }
-    }
-    if (!found && composeState.startedAtTs && composeState.runId) {
-      for (const c of cases) {
-        if (c.ts && tsToEpoch(c.ts) >= composeState.startedAtTs - 60) {
-          found = c.dir; break;
-        }
+    //    ——覆盖「刷新恢复」场景：设计已落盘、目录已建，但刷新后它已在基线里
+    // 注意：claude 一次运行可能建多个目录（如中途另起炉灶），其中有的只是
+    // 没有方案 JSON 的空壳——不能锁定第一个候选，必须逐个尝试，取第一个
+    // 能解析出 steps 的目录。
+    const candidates = [];
+    const seen = new Set();
+    for (const c of cases) { // cases 已按目录名倒序（新→旧）
+      const isNew = !composeState.casesBefore.has(c.dir);
+      const isOwned = !!(composeState.startedAtTs && composeState.runId
+        && c.ts && tsToEpoch(c.ts) >= composeState.startedAtTs - 60);
+      if ((isNew || isOwned) && !seen.has(c.dir)) {
+        candidates.push(c.dir);
+        seen.add(c.dir);
       }
     }
-    if (found) composeState.liveCaseDir = found;
-    // 一旦有归属 case，尝试读取它的完整数据渲染 DAG
-    if (composeState.liveCaseDir && !composeState.liveData) {
+    for (const dir of candidates) {
       try {
-        const data = await loadCase(composeState.liveCaseDir);
+        const data = await loadCase(dir);
         if (data && data.steps && data.steps.length) {
+          composeState.liveCaseDir = dir;
           composeState.liveData = data;
           renderLiveDag(data);
+          return;
         }
-      } catch (e) { /* 方案还没落盘，继续等 */ }
+      } catch (e) { /* 该目录方案还没落盘或解析失败，继续试下一个候选 */ }
+    }
+    // 暂无可渲染的目录：先记住首个候选，供结束时的存档提示兜底
+    if (!composeState.liveCaseDir && candidates.length) {
+      composeState.liveCaseDir = candidates[0];
     }
   } catch (e) { /* 忽略轮询错误 */ }
 }
