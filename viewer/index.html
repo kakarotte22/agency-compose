@@ -944,6 +944,7 @@ function inline(txt) {
 /* ============================ DAG 布局（上→下 垂直流程图 + 重心法减少交叉） ============================ */
 let dagPos = null;          // 当前渲染的节点位置（供拖拽/自动重排使用）
 let dagDims = null;         // 当前画布尺寸
+let dagWaypoints = null;    // 跨层边中转点（拖拽重绘时保持一致）
 let displayG = null;        // 浏览视图当前渲染的展示图（含判断节点），供交互使用
 
 function computeLayout(steps, edges, loopEdges) {
@@ -970,8 +971,33 @@ function computeLayout(steps, edges, loopEdges) {
   }
   steps.forEach(s => calcLayer(s.id));
 
+  // 跨层边插入虚拟节点（Sugiyama）：跨 >1 层的前向边在每个中间层各插
+  // 一个 dummy，依赖关系改写成链式（f → d1 → d2 → … → t）。
+  // dummy 参与分层排序与交叉计数但不渲染——布局自动把 dummy 摆到最优
+  // 位置，跨层长边变成逐层短边：既不横穿整层节点，也不绕画布边缘。
+  const dummySet = new Set();
+  edges.forEach(([f, t]) => {
+    if (memo[f] === undefined || memo[t] === undefined) return;
+    const span = memo[t] - memo[f];
+    if (span <= 1) return;
+    const dums = [];
+    for (let l = memo[f] + 1; l < memo[t]; l++) {
+      const id = `__vd_${l}_${f}_${t}`;
+      memo[id] = l; dummySet.add(id); dums.push(id);
+      deps[id] = [];
+      children[id] = [];
+    }
+    // 链化：deps[t] 中 f 换成链尾，链上各点指向前驱；children 同步
+    deps[t] = deps[t].map(d => (d === f ? dums[dums.length - 1] : d));
+    dums.forEach((d, i) => {
+      deps[d] = [i === 0 ? f : dums[i - 1]];
+      children[d] = [i === dums.length - 1 ? t : dums[i + 1]];
+    });
+    children[f] = children[f].map(c => (c === t ? dums[0] : c));
+  });
+
   const layers = {};
-  steps.forEach(s => { const l = memo[s.id]; (layers[l] = layers[l] || []).push(s); });
+  Object.keys(memo).forEach(id => { const l = memo[id]; (layers[l] = layers[l] || []).push({ id }); });
   const layerKeys = Object.keys(layers).map(Number).sort((a, b) => a - b);
 
   // 重心法排序：逐层，每个节点的"重心"= 其下游节点在当前层的序号平均值
@@ -1091,7 +1117,10 @@ function computeLayout(steps, edges, loopEdges) {
     }
   }
 
-  // 计算位置：层数 → 纵向 y；层内序号 → 横向 x（水平居中排列）
+  // 计算位置：层数 → 纵向 y；层内序号 → 横向 x（水平居中排列）。
+  // 虚拟节点（跨层边中转点）与真实节点一样按 order 序等距占一格——
+  // Sugiyama 标准做法：排序位置即渲染位置，dummy 与真实节点永不重叠。
+  // dummy 层会占宽画布，这是可接受的代价（比 dummy 压在节点上/边绕路好得多）。
   const pos = {};
   const ROW_GAP_X = 250;   // 同层节点水平间距
   const LAYER_GAP_Y = 170; // 层间纵向间距
@@ -1116,10 +1145,21 @@ function computeLayout(steps, edges, loopEdges) {
   const width = MARGIN * 2 + maxLayerWidth;
   const height = MARGIN * 2 + (layerKeys.length - 1) * LAYER_GAP_Y + NODE_H;
 
-  return { pos, width, height, NODE_W, NODE_H };
+  // 跨层边的中转点坐标（供 drawEdges 折行连线）：dummy 中心点
+  const waypoints = new Map();
+  edges.forEach(([f, t]) => {
+    const dums = [];
+    for (let l = (memo[f] ?? 0) + 1; l < (memo[t] ?? 0); l++) {
+      const id = `__vd_${l}_${f}_${t}`;
+      if (dummySet.has(id) && pos[id]) dums.push({ x: pos[id].x + NODE_W / 2, y: pos[id].y + NODE_H / 2 });
+    }
+    if (dums.length) waypoints.set(f + "=>" + t, dums);
+  });
+
+  return { pos, width, height, NODE_W, NODE_H, waypoints };
 }
 
-function drawEdges(svg, edges, pos, NODE_W, NODE_H, loopEdges, decById) {
+function drawEdges(svg, edges, pos, NODE_W, NODE_H, loopEdges, decById, waypoints) {
   // 清除旧边层，重新绘制（拖拽/重排时调用）
   const old = svg.querySelector(".edge-layer");
   if (old) old.remove();
@@ -1189,32 +1229,13 @@ function drawEdges(svg, edges, pos, NODE_W, NODE_H, loopEdges, decById) {
     if (isDiamond(id)) return { x: cx + dx, y: cy - HH * (1 - Math.abs(dx) / HW) };
     return { x: cx + dx, y: p.y };
   };
-  // 侧向端口：节点左/右边缘上的端口（用于水平方向的边）。菱形按边界方程
-  // 插值到左右尖之间的斜边上；dy 在 ±半高 内分散，同侧多边不共点。
+  // 侧向端口：节点左/右边缘上的端口（用于判断节点回边从菱形侧尖出线）。
+  // 菱形按边界方程插值到左右尖之间的斜边上。
   const portSide = (id, side, dy) => {
     const p = pos[id], cx = p.x + HW, cy = p.y + HH;
     if (isDiamond(id)) return { x: cx + side * HW * (1 - Math.abs(dy) / HH), y: cy + dy };
     return { x: cx + side * HW, y: cy + dy };
   };
-  // 侧向端口分散：水平近同列（|dx| < 0.75 节点宽）的边走侧向端口，
-  // 每节点左右侧的出/入边各自编号，端口在 ±半高内错开。
-  const isHorizEdge = (f, t) => {
-    const fa = pos[f], tb = pos[t];
-    return !!(fa && tb && Math.abs(tb.x - fa.x) < NODE_W * 0.75);
-  };
-  const sideOf = (f, t) => (pos[t].x < pos[f].x ? -1 : 1);
-  const sideOutCnt = {}, sideInCnt = {};
-  const sideOutIdx = new Map(), sideInIdx = new Map();
-  edges.forEach(([f, t]) => {
-    if (!isHorizEdge(f, t)) return;
-    const side = sideOf(f, t), inSide = -side; // 出边在源的同侧，入边在目标的对侧
-    const key = f + "=>" + t + "@" + side;
-    sideOutIdx.set(key, sideOutCnt[f + "@" + side] = (sideOutCnt[f + "@" + side] || 0));
-    sideOutCnt[f + "@" + side]++;
-    const ikey = f + "=>" + t + "@" + inSide;
-    sideInIdx.set(ikey, sideInCnt[t + "@" + inSide] = (sideInCnt[t + "@" + inSide] || 0));
-    sideInCnt[t + "@" + inSide]++;
-  });
 
   // 三次贝塞尔曲线边（draw.io / react-flow 的默认策略）：
   // 曲线自然分离、无长水平段横穿节点区域，比正交折线在复杂图上干净得多。
@@ -1222,7 +1243,8 @@ function drawEdges(svg, edges, pos, NODE_W, NODE_H, loopEdges, decById) {
   //
   // 节点避让：曲线若穿过中间节点（不在起终点行范围内的第三者），
   // 把控制点整体向避开方向平移，让曲线绕着节点走而非穿过。
-  const nodeRects = Object.keys(pos).map(id => ({ id, ...pos[id] }));
+  // 节点矩形（仅真实节点；虚拟中转点不是实体，不作障碍、不作碰撞对象）
+  const nodeRects = Object.keys(pos).filter(id => !id.startsWith("__vd_")).map(id => ({ id, ...pos[id] }));
   // 点是否落在节点内部（第三者）：菱形判断节点按菱形边界方程判定
   // （菱形四角空白区不算穿过，比矩形框判定更准确也更宽松），矩形按边框。
   const curveHitsNode = (x, y) => {
@@ -1370,67 +1392,61 @@ function drawEdges(svg, edges, pos, NODE_W, NODE_H, loopEdges, decById) {
     const a = pos[from], b = pos[to];
     if (!a || !b) return;
     let p0, p3, c1, c2, labelText, labelPos;
-    let splinePts = null; // A* 绕障路径（命中节点时启用，Catmull-Rom 平滑）
+    let splinePts = null;  // A* 绕障路径（Catmull-Rom 平滑），兜底用
+    let multiSegs = null;  // 中转点逐段贝塞尔（跨层长边）
     if (!opts.up) {
-      // 前向边端口选择：按起终点相对方位决定。
-      // - 水平近同列（终点在源的正下方附近）：垂直出线必然横扫别的节点，
-      //   改走「源侧边 → 目标对侧边」的水平 S 曲线（连续节点同侧出线）；
-      // - 其余（正常斜跨列）：保持「源底 → 目标顶」。
-      const horiz = isHorizEdge(from, to);
-      const side = sideOf(from, to);
-      const sideKey = from + "=>" + to + "@" + side;
-      if (horiz && sideOutIdx.has(sideKey)) {
-        const nOut = sideOutCnt[from + "@" + side] || 1;
-        const nIn = sideInCnt[to + "@" + (-side)] || 1;
-        const dyOut = spread(nOut)[sideOutIdx.get(sideKey)] * (NODE_H / 2 - 12);
-        const dyIn = spread(nIn)[sideInIdx.get(from + "=>" + to + "@" + (-side))] * (NODE_H / 2 - 12);
-        p0 = portSide(from, side, dyOut);
-        p3 = portSide(to, -side, dyIn);
-        const dx = p3.x - p0.x, dy = p3.y - p0.y;
-        // 水平 S 曲线：控制点沿连接方向拉出，自然弯绕
-        const gap = Math.max(Math.abs(dx) * 0.4, 30);
-        c1 = { x: p0.x + side * gap, y: p0.y + dy * 0.2 };
-        c2 = { x: p3.x - side * gap, y: p3.y - dy * 0.2 };
-      } else {
-        p0 = portBottom(from, fwdOutOff.get(from + "=>" + to) || 0);
-        p3 = portTop(to, fwdInOff.get(from + "=>" + to) || 0);
-        const dy = p3.y - p0.y, dx = p3.x - p0.x;
-        if (dy > 40) {
-          // 下行：垂直 S 曲线（少量水平分量适配斜跨列）
-          const gap = Math.min(Math.max(dy * 0.45, 36), 110) + (opts.jitter || 0);
-          c1 = { x: p0.x + dx * 0.1, y: p0.y + gap };
-          c2 = { x: p3.x - dx * 0.1, y: p3.y - gap };
-        } else {
-          // 同层/近同层：水平 S 曲线
-          c1 = { x: p0.x + dx * 0.4, y: p0.y };
-          c2 = { x: p3.x - dx * 0.4, y: p3.y };
-        }
-      }
+      // 前向边：源底部端口 → 目标顶部端口（形状感知）。
+      // 跨层长边（>1 层）带布局阶段算好的中转点（虚拟节点位置），
+      // 逐段下行——既不横穿整层节点，也不绕画布边缘。
+      p0 = portBottom(from, fwdOutOff.get(from + "=>" + to) || 0);
+      p3 = portTop(to, fwdInOff.get(from + "=>" + to) || 0);
+      const via = (waypoints && waypoints.get(from + "=>" + to)) || null;
       const dy = p3.y - p0.y, dx = p3.x - p0.x;
-      // 「是」标签：起点沿初始方向偏移，避开曲线（侧向出线时放在端口外侧）
+      if (via && via.length) {
+        // 途经中转点：逐段三次贝塞尔（与普通前向边同形的垂直 S 曲线），
+        // 段间控制点对称（一阶连续）。不用 Catmull-Rom 全局样条——
+        // 其切线由邻点外推，长水平段会过冲、重新扫进旁边的节点。
+        const chain = [p0, ...via, p3];
+        const segs = [];
+        for (let i = 0; i < chain.length - 1; i++) {
+          const a = chain[i], c = chain[i + 1];
+          const sdy = c.y - a.y;
+          const gap = Math.min(Math.max(sdy * 0.45, 30), 90);
+          segs.push([a, { x: a.x, y: a.y + gap }, { x: c.x, y: c.y - gap }, c]);
+        }
+        multiSegs = segs;
+      } else if (dy > 40) {
+        // 下行：垂直 S 曲线（少量水平分量适配斜跨列）
+        const gap = Math.min(Math.max(dy * 0.45, 36), 110) + (opts.jitter || 0);
+        c1 = { x: p0.x + dx * 0.1, y: p0.y + gap };
+        c2 = { x: p3.x - dx * 0.1, y: p3.y - gap };
+      } else {
+        // 同层/近同层：水平 S 曲线
+        c1 = { x: p0.x + dx * 0.4, y: p0.y };
+        c2 = { x: p3.x - dx * 0.4, y: p3.y };
+      }
+      // 「是」标签：起点沿初始方向偏移，避开曲线
       if (opts.label) {
-        labelPos = horiz
-          ? { x: p0.x + (side > 0 ? 12 : -12), y: p0.y - 4, anchor: side > 0 ? "start" : "end" }
-          : dy > 40
-            ? { x: p0.x - 7, y: p0.y + 20, anchor: "end" }
-            : { x: p0.x + (dx > 0 ? 10 : -10), y: p0.y + 4, anchor: dx > 0 ? "start" : "end" };
+        labelPos = dy > 40
+          ? { x: p0.x - 7, y: p0.y + 20, anchor: "end" }
+          : { x: p0.x + (dx > 0 ? 10 : -10), y: p0.y + 4, anchor: dx > 0 ? "start" : "end" };
         labelText = opts.label.text;
       }
-      // —— 节点避让：采样曲线，穿过第三者节点则改走 A* 网格绕障路由 ——
-      // 采样密度 t=0.1~0.9 与命中区间同尺度；命中则交给 routeAround 搜出
-      // 无碰撞折线（拐点已切角），返回 null（无解/图太大）时保持直连曲线。
-      splinePts = null;
-      let hits = 0;
-      for (let i = 1; i < 10; i++) {
-        const t = i / 10, mt = 1 - t;
-        const px = mt * mt * mt * p0.x + 3 * mt * mt * t * c1.x + 3 * mt * t * t * c2.x + t * t * t * p3.x;
-        const py = mt * mt * mt * p0.y + 3 * mt * mt * t * c1.y + 3 * mt * t * t * c2.y + t * t * t * p3.y;
-        const h = curveHitsNode(px, py);
-        if (h && h.id !== from && h.id !== to) { hits = 1; break; }
-      }
-      if (hits) {
-        const via = routeAround(from, to, p0, p3);
-        if (via && via.length) splinePts = [p0, ...via, p3];
+      // —— 兜底避让：直连曲线（无中转点）穿过第三者节点时改走 A* 绕障 ——
+      // 有中转点的边走逐段贝塞尔（不穿节点），无中转点命中时由 routeAround 兜底。
+      if (!multiSegs) {
+        let hits = 0;
+        for (let i = 1; i < 10; i++) {
+          const t = i / 10, mt = 1 - t;
+          const px = mt * mt * mt * p0.x + 3 * mt * mt * t * c1.x + 3 * mt * t * t * c2.x + t * t * t * p3.x;
+          const py = mt * mt * mt * p0.y + 3 * mt * mt * t * c1.y + 3 * mt * t * t * c2.y + t * t * t * p3.y;
+          const h = curveHitsNode(px, py);
+          if (h && h.id !== from && h.id !== to) { hits = 1; break; }
+        }
+        if (hits) {
+          const av = routeAround(from, to, p0, p3);
+          if (av && av.length) splinePts = [p0, ...av, p3];
+        }
       }
     } else {
       // 回边（「否」分支）：判断节点从侧尖水平出（菱形判断节点在源节点正
@@ -1464,7 +1480,13 @@ function drawEdges(svg, edges, pos, NODE_W, NODE_H, loopEdges, decById) {
       }
     }
     let dAttr;
-    if (splinePts) {
+    if (multiSegs) {
+      // 中转点逐段贝塞尔：M 起点 + 每段 C（段间控制点对称保证一阶连续）
+      dAttr = `M ${multiSegs[0][0].x} ${multiSegs[0][0].y}`;
+      multiSegs.forEach(([, a, b, end]) => {
+        dAttr += ` C ${a.x} ${a.y} ${b.x} ${b.y} ${end.x} ${end.y}`;
+      });
+    } else if (splinePts) {
       // Catmull-Rom 样条转三次贝塞尔：过所有拐点、切线由邻点决定，
       // 比折线圆润，也比单段贝塞尔更贴合 A* 搜出的绕行走廊
       const P = splinePts;
@@ -1488,7 +1510,11 @@ function drawEdges(svg, edges, pos, NODE_W, NODE_H, loopEdges, decById) {
     const isLoop = cls.includes("edge-loop");
     const arrow = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
     let tX, tY;
-    if (splinePts) {
+    if (multiSegs) {
+      // 末段贝塞尔终点切线 = end - 第二控制点
+      const last = multiSegs[multiSegs.length - 1];
+      tX = last[3].x - last[2].x; tY = last[3].y - last[2].y;
+    } else if (splinePts) {
       // 末段 Catmull-Rom 的终点切向量：p2_ 被钳位到终点，切线 = 末段方向
       const P = splinePts, n = P.length;
       tX = P[n - 1].x - P[n - 2].x; tY = P[n - 1].y - P[n - 2].y;
@@ -1658,14 +1684,14 @@ function renderDag(data, svgId = "#dag", interactive = true) {
   if (interactive) displayG = g; // 供交互（高亮/选中/拖拽连线/重排）使用
 
   const layoutNodes = g.nodes.map(n => ({ id: n.id, depends_on: g.deps[n.id] || [] }));
-  const { pos, width, height, NODE_W, NODE_H } = computeLayout(layoutNodes, g.forwardEdges, g.loopEdges);
-  dagPos = pos; dagDims = { width, height, NODE_W, NODE_H };
+  const { pos, width, height, NODE_W, NODE_H, waypoints } = computeLayout(layoutNodes, g.forwardEdges, g.loopEdges);
+  dagPos = pos; dagDims = { width, height, NODE_W, NODE_H }; dagWaypoints = waypoints;
   svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
   svg.setAttribute("width", width);
   svg.setAttribute("height", height);
 
   // ---- 边（画在节点下方）----
-  drawEdges(svg, g.forwardEdges, pos, NODE_W, NODE_H, g.loopEdges, g.decById);
+  drawEdges(svg, g.forwardEdges, pos, NODE_W, NODE_H, g.loopEdges, g.decById, waypoints);
 
   // ---- 节点 ----
   g.nodes.forEach(n => {
@@ -1878,7 +1904,7 @@ function setupDragListeners(svg) {
     const nx = p.x + dx, ny = p.y + dy;
     dagPos[id] = { x: nx, y: ny };
     nodeEl.setAttribute("transform", `translate(${nx}, ${ny})`);
-    if (displayG) drawEdges(svg, displayG.forwardEdges, dagPos, dagDims.NODE_W, dagDims.NODE_H, displayG.loopEdges, displayG.decById);
+    if (displayG) drawEdges(svg, displayG.forwardEdges, dagPos, dagDims.NODE_W, dagDims.NODE_H, displayG.loopEdges, displayG.decById, dagWaypoints);
     fitToContent(svg, dagDims.NODE_W, dagDims.NODE_H);
   });
   document.addEventListener("mouseup", (ev) => {
@@ -1974,8 +2000,8 @@ function renderLegend(steps) {
 function resetDagLayout() {
   if (!currentData || !currentData.steps.length || !displayG) return;
   const layoutNodes = displayG.nodes.map(n => ({ id: n.id, depends_on: displayG.deps[n.id] || [] }));
-  const { pos, width, height, NODE_W, NODE_H } = computeLayout(layoutNodes, displayG.forwardEdges, displayG.loopEdges);
-  dagPos = pos; dagDims = { width, height, NODE_W, NODE_H };
+  const { pos, width, height, NODE_W, NODE_H, waypoints } = computeLayout(layoutNodes, displayG.forwardEdges, displayG.loopEdges);
+  dagPos = pos; dagDims = { width, height, NODE_W, NODE_H }; dagWaypoints = waypoints;
   const svg = $("#dag");
   svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
   svg.setAttribute("width", width);
@@ -1984,7 +2010,7 @@ function resetDagLayout() {
     const p = pos[nodeEl.dataset.id];
     if (p) nodeEl.setAttribute("transform", `translate(${p.x}, ${p.y})`);
   });
-  drawEdges(svg, displayG.forwardEdges, pos, NODE_W, NODE_H, displayG.loopEdges, displayG.decById);
+  drawEdges(svg, displayG.forwardEdges, pos, NODE_W, NODE_H, displayG.loopEdges, displayG.decById, waypoints);
 }
 
 async function selectCase(dir, itemEl) {
