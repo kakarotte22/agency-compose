@@ -946,7 +946,7 @@ let dagPos = null;          // 当前渲染的节点位置（供拖拽/自动重
 let dagDims = null;         // 当前画布尺寸
 let displayG = null;        // 浏览视图当前渲染的展示图（含判断节点），供交互使用
 
-function computeLayout(steps, edges) {
+function computeLayout(steps, edges, loopEdges) {
   const idIndex = {}; steps.forEach(s => { idIndex[s.id] = s; });
   const deps = {}; steps.forEach(s => { deps[s.id] = (s.depends_on || []).filter(d => idIndex[d]); });
   const children = {}; steps.forEach(s => { children[s.id] = []; });
@@ -981,12 +981,21 @@ function computeLayout(steps, edges) {
     layers[l].forEach((s, i) => { order[s.id] = i; });
   });
 
-  // 交叉计数：当前序下相邻层之间的边交叉数（用于排序后的贪心交换微调）
+  // 交叉计数：当前序下相邻层之间的边交叉数（用于排序后的贪心交换微调）。
+  // 除前向边外还纳入回边（「否」分支）：回边虽然走层间 U 形通道，但同层序
+  // 交错同样意味着回边弧线要横穿更多节点——把它算进交叉数，布局才会把
+  // 回边目标（如 S2）挪到能让否边少穿节点的位置。
+  const loopPairs = [];
+  (loopEdges || []).forEach(e => {
+    if (order[e.from] !== undefined && order[e.to] !== undefined) {
+      loopPairs.push([order[e.from], order[e.to], e.from, e.to]);
+    }
+  });
   const countCrossings = () => {
     let n = 0;
+    // 前向边：相邻层之间端点序交错计一次交叉
     for (let li = 0; li < layerKeys.length - 1; li++) {
-      const upper = layers[layerKeys[li]], lower = layers[layerKeys[li + 1]];
-      // 每对 (上层的边, 下层的边) 若端点序交错则计一次交叉
+      const upper = layers[layerKeys[li]];
       const pairs = [];
       upper.forEach(s => (deps[s.id] || []).forEach(d => {
         if (order[d] !== undefined) pairs.push([order[s.id], order[d]]);
@@ -998,19 +1007,47 @@ function computeLayout(steps, edges) {
           if ((u1 < u2 && v1 > v2) || (u1 > u2 && v1 < v2)) n++;
         }
       }
-      void lower;
+    }
+    // 回边：与全部前向边的端点序交错各计一次；两回边之间也计。
+    // 回边通常跨多层，序交错的代价让它倾向把目标节点排到回路收口同侧。
+    const fwdPairs = [];
+    layerKeys.forEach(l => {
+      layers[l].forEach(s => (deps[s.id] || []).forEach(d => {
+        if (order[d] !== undefined) fwdPairs.push([order[s.id], order[d]]);
+      }));
+    });
+    const curLoops = loopPairs.map(p => [order[p[2]], order[p[3]]]);
+    fwdPairs.forEach(([u1, v1]) => {
+      curLoops.forEach(([u2, v2]) => {
+        if (u1 === u2) return;
+        if ((u1 < u2 && v1 > v2) || (u1 > u2 && v1 < v2)) n++;
+      });
+    });
+    for (let a = 0; a < curLoops.length; a++) {
+      for (let b = a + 1; b < curLoops.length; b++) {
+        const [u1, v1] = curLoops[a], [u2, v2] = curLoops[b];
+        if (u1 === u2) continue;
+        if ((u1 < u2 && v1 > v2) || (u1 > u2 && v1 < v2)) n++;
+      }
     }
     return n;
   };
 
-  // 从顶层开始，向下用"上游重心"重排下层；再从底层向上，用"下游重心"重排上层
+  // 从顶层开始，向下用"上游重心"重排下层；再从底层向上，用"下游重心"重排上层。
+  // 重心邻居包含回边（「否」分支的另一端），让回边两端也互相吸引排序。
+  const loopUps = {}, loopDowns = {}; // 回边带来的虚拟上/下游
+  (loopEdges || []).forEach(e => {
+    (loopDowns[e.from] = loopDowns[e.from] || []).push(e.to);
+    (loopUps[e.to] = loopUps[e.to] || []).push(e.from);
+  });
   for (let pass = 0; pass < 4; pass++) {
     // 自顶向下：用已定序的上游层的平均序号，重排当前层
     for (let li = 1; li < layerKeys.length; li++) {
       const arr = layers[layerKeys[li]];
       const bary = {};
       arr.forEach(s => {
-        const ups = deps[s.id].filter(d => order[d] !== undefined);
+        const ups = deps[s.id].filter(d => order[d] !== undefined)
+          .concat((loopUps[s.id] || []).filter(d => order[d] !== undefined));
         bary[s.id] = ups.length ? ups.reduce((a, d) => a + order[d], 0) / ups.length : order[s.id];
       });
       arr.sort((a, b) => bary[a.id] - bary[b.id]);
@@ -1021,7 +1058,8 @@ function computeLayout(steps, edges) {
       const arr = layers[layerKeys[li]];
       const bary = {};
       arr.forEach(s => {
-        const downs = children[s.id].filter(d => order[d] !== undefined);
+        const downs = children[s.id].filter(d => order[d] !== undefined)
+          .concat((loopDowns[s.id] || []).filter(d => order[d] !== undefined));
         bary[s.id] = downs.length ? downs.reduce((a, d) => a + order[d], 0) / downs.length : order[s.id];
       });
       arr.sort((a, b) => bary[a.id] - bary[b.id]);
@@ -1151,6 +1189,32 @@ function drawEdges(svg, edges, pos, NODE_W, NODE_H, loopEdges, decById) {
     if (isDiamond(id)) return { x: cx + dx, y: cy - HH * (1 - Math.abs(dx) / HW) };
     return { x: cx + dx, y: p.y };
   };
+  // 侧向端口：节点左/右边缘上的端口（用于水平方向的边）。菱形按边界方程
+  // 插值到左右尖之间的斜边上；dy 在 ±半高 内分散，同侧多边不共点。
+  const portSide = (id, side, dy) => {
+    const p = pos[id], cx = p.x + HW, cy = p.y + HH;
+    if (isDiamond(id)) return { x: cx + side * HW * (1 - Math.abs(dy) / HH), y: cy + dy };
+    return { x: cx + side * HW, y: cy + dy };
+  };
+  // 侧向端口分散：水平近同列（|dx| < 0.75 节点宽）的边走侧向端口，
+  // 每节点左右侧的出/入边各自编号，端口在 ±半高内错开。
+  const isHorizEdge = (f, t) => {
+    const fa = pos[f], tb = pos[t];
+    return !!(fa && tb && Math.abs(tb.x - fa.x) < NODE_W * 0.75);
+  };
+  const sideOf = (f, t) => (pos[t].x < pos[f].x ? -1 : 1);
+  const sideOutCnt = {}, sideInCnt = {};
+  const sideOutIdx = new Map(), sideInIdx = new Map();
+  edges.forEach(([f, t]) => {
+    if (!isHorizEdge(f, t)) return;
+    const side = sideOf(f, t), inSide = -side; // 出边在源的同侧，入边在目标的对侧
+    const key = f + "=>" + t + "@" + side;
+    sideOutIdx.set(key, sideOutCnt[f + "@" + side] = (sideOutCnt[f + "@" + side] || 0));
+    sideOutCnt[f + "@" + side]++;
+    const ikey = f + "=>" + t + "@" + inSide;
+    sideInIdx.set(ikey, sideInCnt[t + "@" + inSide] = (sideInCnt[t + "@" + inSide] || 0));
+    sideInCnt[t + "@" + inSide]++;
+  });
 
   // 三次贝塞尔曲线边（draw.io / react-flow 的默认策略）：
   // 曲线自然分离、无长水平段横穿节点区域，比正交折线在复杂图上干净得多。
@@ -1308,25 +1372,48 @@ function drawEdges(svg, edges, pos, NODE_W, NODE_H, loopEdges, decById) {
     let p0, p3, c1, c2, labelText, labelPos;
     let splinePts = null; // A* 绕障路径（命中节点时启用，Catmull-Rom 平滑）
     if (!opts.up) {
-      // 前向边：源底部端口 -> 目标顶部端口（端口在节点真实形状边界上）
-      p0 = portBottom(from, fwdOutOff.get(from + "=>" + to) || 0);
-      p3 = portTop(to, fwdInOff.get(from + "=>" + to) || 0);
-      const dy = p3.y - p0.y, dx = p3.x - p0.x;
-      if (dy > 40) {
-        // 下行：垂直 S 曲线（少量水平分量适配斜跨列）
-        const gap = Math.min(Math.max(dy * 0.45, 36), 110) + (opts.jitter || 0);
-        c1 = { x: p0.x + dx * 0.1, y: p0.y + gap };
-        c2 = { x: p3.x - dx * 0.1, y: p3.y - gap };
+      // 前向边端口选择：按起终点相对方位决定。
+      // - 水平近同列（终点在源的正下方附近）：垂直出线必然横扫别的节点，
+      //   改走「源侧边 → 目标对侧边」的水平 S 曲线（连续节点同侧出线）；
+      // - 其余（正常斜跨列）：保持「源底 → 目标顶」。
+      const horiz = isHorizEdge(from, to);
+      const side = sideOf(from, to);
+      const sideKey = from + "=>" + to + "@" + side;
+      if (horiz && sideOutIdx.has(sideKey)) {
+        const nOut = sideOutCnt[from + "@" + side] || 1;
+        const nIn = sideInCnt[to + "@" + (-side)] || 1;
+        const dyOut = spread(nOut)[sideOutIdx.get(sideKey)] * (NODE_H / 2 - 12);
+        const dyIn = spread(nIn)[sideInIdx.get(from + "=>" + to + "@" + (-side))] * (NODE_H / 2 - 12);
+        p0 = portSide(from, side, dyOut);
+        p3 = portSide(to, -side, dyIn);
+        const dx = p3.x - p0.x, dy = p3.y - p0.y;
+        // 水平 S 曲线：控制点沿连接方向拉出，自然弯绕
+        const gap = Math.max(Math.abs(dx) * 0.4, 30);
+        c1 = { x: p0.x + side * gap, y: p0.y + dy * 0.2 };
+        c2 = { x: p3.x - side * gap, y: p3.y - dy * 0.2 };
       } else {
-        // 同层/近同层：水平 S 曲线
-        c1 = { x: p0.x + dx * 0.4, y: p0.y };
-        c2 = { x: p3.x - dx * 0.4, y: p3.y };
+        p0 = portBottom(from, fwdOutOff.get(from + "=>" + to) || 0);
+        p3 = portTop(to, fwdInOff.get(from + "=>" + to) || 0);
+        const dy = p3.y - p0.y, dx = p3.x - p0.x;
+        if (dy > 40) {
+          // 下行：垂直 S 曲线（少量水平分量适配斜跨列）
+          const gap = Math.min(Math.max(dy * 0.45, 36), 110) + (opts.jitter || 0);
+          c1 = { x: p0.x + dx * 0.1, y: p0.y + gap };
+          c2 = { x: p3.x - dx * 0.1, y: p3.y - gap };
+        } else {
+          // 同层/近同层：水平 S 曲线
+          c1 = { x: p0.x + dx * 0.4, y: p0.y };
+          c2 = { x: p3.x - dx * 0.4, y: p3.y };
+        }
       }
-      // 「是」标签：起点沿初始方向偏移，避开曲线
+      const dy = p3.y - p0.y, dx = p3.x - p0.x;
+      // 「是」标签：起点沿初始方向偏移，避开曲线（侧向出线时放在端口外侧）
       if (opts.label) {
-        labelPos = dy > 40
-          ? { x: p0.x - 7, y: p0.y + 20, anchor: "end" }
-          : { x: p0.x + (dx > 0 ? 10 : -10), y: p0.y + 4, anchor: dx > 0 ? "start" : "end" };
+        labelPos = horiz
+          ? { x: p0.x + (side > 0 ? 12 : -12), y: p0.y - 4, anchor: side > 0 ? "start" : "end" }
+          : dy > 40
+            ? { x: p0.x - 7, y: p0.y + 20, anchor: "end" }
+            : { x: p0.x + (dx > 0 ? 10 : -10), y: p0.y + 4, anchor: dx > 0 ? "start" : "end" };
         labelText = opts.label.text;
       }
       // —— 节点避让：采样曲线，穿过第三者节点则改走 A* 网格绕障路由 ——
@@ -1346,13 +1433,26 @@ function drawEdges(svg, edges, pos, NODE_W, NODE_H, loopEdges, decById) {
         if (via && via.length) splinePts = [p0, ...via, p3];
       }
     } else {
-      // 回边（「否」分支）：U 形绕行弧线，从目标底部（形状感知端口）向上进入；
-      // drop 深度按 lane 错层，多条回边弧线不共线
-      p0 = portBottom(from, loopOutOff.get(opts.edge) || 0);
+      // 回边（「否」分支）：判断节点从侧尖水平出（菱形判断节点在源节点正
+      // 下方时，底部出线的 U 形弧线会穿过正上方的源节点），下行后 U 形绕行，
+      // 从目标底部（形状感知端口）向上进入；drop 深度按 lane 错层不共线。
+      // 出边侧向选择：目标在左侧 → 左尖出；右侧 → 右尖出；同列 → 右尖。
+      const side = pos[to].x + HW < pos[from].x + HW ? -1 : 1;
+      if (isDiamond(from)) {
+        p0 = portSide(from, side, 0); // 菱形侧尖
+      } else {
+        p0 = portBottom(from, loopOutOff.get(opts.edge) || 0);
+      }
       p3 = portBottom(to, loopInOff.get(opts.edge) || 0);
       const drop = 46 + (opts.lane || 0) * LOOP_LANE_GAP;
-      c1 = { x: p0.x, y: p0.y + drop };
-      c2 = { x: p3.x, y: p3.y + drop };
+      // 侧尖出线的 U 形：先水平走出一段再下探，控制点错开避免与下行段交叉
+      if (isDiamond(from)) {
+        c1 = { x: p0.x + side * 60, y: p0.y + drop * 0.4 };
+        c2 = { x: p3.x, y: p3.y + drop };
+      } else {
+        c1 = { x: p0.x, y: p0.y + drop };
+        c2 = { x: p3.x, y: p3.y + drop };
+      }
       // 标签放曲线最低点（t=0.5）附近
       if (opts.label) {
         const mid = {
@@ -1558,7 +1658,7 @@ function renderDag(data, svgId = "#dag", interactive = true) {
   if (interactive) displayG = g; // 供交互（高亮/选中/拖拽连线/重排）使用
 
   const layoutNodes = g.nodes.map(n => ({ id: n.id, depends_on: g.deps[n.id] || [] }));
-  const { pos, width, height, NODE_W, NODE_H } = computeLayout(layoutNodes, g.forwardEdges);
+  const { pos, width, height, NODE_W, NODE_H } = computeLayout(layoutNodes, g.forwardEdges, g.loopEdges);
   dagPos = pos; dagDims = { width, height, NODE_W, NODE_H };
   svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
   svg.setAttribute("width", width);
@@ -1874,7 +1974,7 @@ function renderLegend(steps) {
 function resetDagLayout() {
   if (!currentData || !currentData.steps.length || !displayG) return;
   const layoutNodes = displayG.nodes.map(n => ({ id: n.id, depends_on: displayG.deps[n.id] || [] }));
-  const { pos, width, height, NODE_W, NODE_H } = computeLayout(layoutNodes, displayG.forwardEdges);
+  const { pos, width, height, NODE_W, NODE_H } = computeLayout(layoutNodes, displayG.forwardEdges, displayG.loopEdges);
   dagPos = pos; dagDims = { width, height, NODE_W, NODE_H };
   const svg = $("#dag");
   svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
