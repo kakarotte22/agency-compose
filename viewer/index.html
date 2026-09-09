@@ -1095,27 +1095,60 @@ function computeLayout(steps, edges, loopEdges) {
 
   // 贪心交换微调：重心排序后仍可能残留「交换相邻两节点可减交叉」的局部次优。
   // 逐层尝试交换相邻对，交叉数下降则保留；O(n²·E) 在本地小图上完全可接受。
-  for (let li = 0; li < layerKeys.length; li++) {
-    const arr = layers[layerKeys[li]];
-    let improved = true;
-    let guard = 0;
-    while (improved && guard++ < 20) {
-      improved = false;
-      for (let i = 0; i < arr.length - 1; i++) {
-        const before = countCrossings();
-        const a = arr[i], b = arr[i + 1];
-        order[a.id] = i + 1; order[b.id] = i;
-        arr[i] = b; arr[i + 1] = a;
-        if (countCrossings() < before) {
-          improved = true; // 保留交换
-        } else {
-          // 回退
-          order[a.id] = i; order[b.id] = i + 1;
-          arr[i] = a; arr[i + 1] = b;
+  // 交叉最小化是 NP-hard，单轮贪心易陷局部最优——外层做 4 轮扰动重启
+  // （随机换 2 对再贪心），保留全程最低交叉的排列，显著跳出局部最优。
+  const snapshotOrder = () => {
+    const s = {};
+    layerKeys.forEach(l => layers[l].forEach((s2, i) => { s[s2.id] = i; }));
+    return s;
+  };
+  const restoreOrder = (snap) => {
+    layerKeys.forEach(l => {
+      layers[l].sort((x, y) => snap[x.id] - snap[y.id]);
+      layers[l].forEach((s2, i) => { order[s2.id] = i; });
+    });
+  };
+  let bestOrder = snapshotOrder();
+  let bestCross = countCrossings();
+  for (let restart = 0; restart < 4; restart++) {
+    if (restart > 0) {
+      // 扰动：随机交换同层两对节点，制造新起点
+      for (let k = 0; k < 2; k++) {
+        const l = layerKeys[Math.floor(Math.random() * layerKeys.length)];
+        const arr = layers[l];
+        if (arr.length < 2) continue;
+        const i = Math.floor(Math.random() * (arr.length - 1));
+        const j = Math.floor(Math.random() * arr.length);
+        const a = arr[i], b = arr[j];
+        arr[i] = b; arr[j] = a;
+        order[a.id] = j; order[b.id] = i;
+      }
+    }
+    for (let li = 0; li < layerKeys.length; li++) {
+      const arr = layers[layerKeys[li]];
+      let improved = true;
+      let guard = 0;
+      while (improved && guard++ < 20) {
+        improved = false;
+        for (let i = 0; i < arr.length - 1; i++) {
+          const before = countCrossings();
+          const a = arr[i], b = arr[i + 1];
+          order[a.id] = i + 1; order[b.id] = i;
+          arr[i] = b; arr[i + 1] = a;
+          if (countCrossings() < before) {
+            improved = true; // 保留交换
+          } else {
+            // 回退
+            order[a.id] = i; order[b.id] = i + 1;
+            arr[i] = a; arr[i + 1] = b;
+          }
         }
       }
     }
+    const c = countCrossings();
+    if (c < bestCross) { bestCross = c; bestOrder = snapshotOrder(); }
   }
+  restoreOrder(bestOrder);
 
   // 计算位置：层数 → 纵向 y；层内序号 → 横向 x（水平居中排列）。
   // 虚拟节点（跨层边中转点）与真实节点一样按 order 序等距占一格——
@@ -1235,6 +1268,241 @@ function drawEdges(svg, edges, pos, NODE_W, NODE_H, loopEdges, decById, waypoint
     const p = pos[id], cx = p.x + HW, cy = p.y + HH;
     if (isDiamond(id)) return { x: cx + side * HW * (1 - Math.abs(dy) / HH), y: cy + dy };
     return { x: cx + side * HW, y: cy + dy };
+  };
+
+  /* ---- 端口系统 + 爬山搜索最优连接 ----
+     每个节点固定一组端口：矩形 = 上下边各 3 个（左/中/右）+ 左右边中点各 1 个；
+     菱形判断节点 = 四个角。连线只能端口进、端口出。
+     端口分配是组合优化问题（全遍历组合爆炸），用爬山搜索：
+     代价 = 边-边交叉数 + 边穿第三者节点 + 端口复用惩罚，
+     每条边尝试换到更优的空闲端口组合，只接受改进，迭代到收敛。 */
+  const PORT_ENUM = {};
+  Object.keys(pos).filter(id => !id.startsWith("__vd_")).forEach(id => {
+    const p = pos[id], cx = p.x + HW, cy = p.y + HH;
+    if (isDiamond(id)) {
+      PORT_ENUM[id] = [
+        { x: cx, y: cy - HH, nx: 0, ny: -1 },      // 上角
+        { x: cx + HW, y: cy, nx: 1, ny: 0 },        // 右角
+        { x: cx, y: cy + HH, nx: 0, ny: 1 },        // 下角
+        { x: cx - HW, y: cy, nx: -1, ny: 0 },       // 左角
+      ];
+    } else {
+      PORT_ENUM[id] = [
+        { x: cx - HW * 0.55, y: p.y, nx: 0, ny: -1 },          // 上-左
+        { x: cx, y: p.y, nx: 0, ny: -1 },                       // 上-中
+        { x: cx + HW * 0.55, y: p.y, nx: 0, ny: -1 },          // 上-右
+        { x: cx - HW * 0.55, y: p.y + NODE_H, nx: 0, ny: 1 },  // 下-左
+        { x: cx, y: p.y + NODE_H, nx: 0, ny: 1 },               // 下-中
+        { x: cx + HW * 0.55, y: p.y + NODE_H, nx: 0, ny: 1 },  // 下-右
+        { x: p.x, y: cy, nx: -1, ny: 0 },                       // 左-中
+        { x: p.x + NODE_W, y: cy, nx: 1, ny: 0 },               // 右-中
+      ];
+    }
+  });
+  // 给定源/目标端口（+可选中转点）生成贝塞尔段：首段沿源端口法线出，
+  // 末段沿目标端口法线入，中间点切向垂直——渲染与代价评估共用此函数
+  const portSegs = (fp, tp, via) => {
+    const chain = (via && via.length) ? [fp, ...via, tp] : [fp, tp];
+    const segs = [];
+    for (let i = 0; i < chain.length - 1; i++) {
+      const a = chain[i], b = chain[i + 1];
+      const gap = Math.min(Math.max(Math.abs(b.y - a.y) * 0.45, 30), 90);
+      const c1 = i === 0
+        ? { x: a.x + fp.nx * gap, y: a.y + fp.ny * gap }
+        : { x: a.x, y: a.y + gap };
+      const c2 = i === chain.length - 2
+        ? { x: b.x + tp.nx * gap, y: b.y + tp.ny * gap }
+        : { x: b.x, y: b.y - gap };
+      segs.push([a, c1, c2, b]);
+    }
+    return segs;
+  };
+  const segSample = (segs) => {
+    const pts = [];
+    segs.forEach(([p0, c1, c2, p3]) => {
+      for (let i = 0; i <= 10; i++) {
+        const t = i / 10, mt = 1 - t;
+        pts.push({
+          x: mt * mt * mt * p0.x + 3 * mt * mt * t * c1.x + 3 * mt * t * t * c2.x + t * t * t * p3.x,
+          y: mt * mt * mt * p0.y + 3 * mt * mt * t * c1.y + 3 * mt * t * t * c2.y + t * t * t * p3.y,
+        });
+      }
+    });
+    return pts;
+  };
+  const polyCross = (A, B) => {
+    // 两折线是否相交（共享端点的边在端点相触不算）
+    const cr = (a, b, c, d) => {
+      const d1 = (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
+      const d2 = (b.x - a.x) * (d.y - a.y) - (b.y - a.y) * (d.x - a.x);
+      const d3 = (d.x - c.x) * (a.y - c.y) - (d.y - c.y) * (a.x - c.x);
+      const d4 = (d.x - c.x) * (b.y - c.y) - (d.y - c.y) * (b.x - c.x);
+      return d1 * d2 < 0 && d3 * d4 < 0;
+    };
+    for (let i = 0; i < A.length - 1; i++) {
+      for (let j = 0; j < B.length - 1; j++) {
+        if (cr(A[i], A[i + 1], B[j], B[j + 1])) return 1;
+      }
+    }
+    return 0;
+  };
+  const polyHitsNode = (pts, from, to) => {
+    for (const pt of pts) {
+      const h = curveHitsNode(pt.x, pt.y);
+      if (h && h.id !== from && h.id !== to) return 1;
+    }
+    return 0;
+  };
+  // ---- 前向边的端口分配优化 ----
+  const fwdEdges = edges.map(([f, t]) => ({ f, t, key: f + "=>" + t }));
+  const portAssign = new Map(); // key -> {fp, tp}
+  const portUse = new Map();    // "nodeId:portIdx" -> 使用计数
+  const usePort = (id, idx, d) => {
+    const k = id + ":" + idx;
+    portUse.set(k, (portUse.get(k) || 0) + d);
+  };
+  const edgeSamples = new Map(); // key -> 采样点（代价评估缓存）
+  const refreshEdge = (e, fp, tp) => {
+    edgeSamples.set(e.key, segSample(portSegs(fp, tp, waypoints && waypoints.get(e.key))));
+  };
+  const initAssign = () => {
+    // 初始分配：出边按目标 x 序优先占底边 3 口（b-l/b-m/b-r），
+    // 入边按源 x 序优先占顶边 3 口（t-l/t-m/t-r），溢出走侧口。
+    // 端口枚举缺失的边（节点不在 pos，如实时视图首帧）跳过——
+    // _mkPath 对无分配的边回退到底/顶直连端口。
+    const outs = {}, ins = {};
+    fwdEdges.forEach(e => {
+      if (!PORT_ENUM[e.f] || !PORT_ENUM[e.t]) return;
+      (outs[e.f] = outs[e.f] || []).push(e);
+      (ins[e.t] = ins[e.t] || []).push(e);
+    });
+    const BOT = [3, 4, 5, 7, 6], TOP = [0, 1, 2, 6, 7]; // 底/顶优先端口序（含侧口兜底）
+    Object.values(outs).forEach(list => {
+      list.sort((a, b) => pos[a.t].x - pos[b.t].x);
+      list.forEach((e, i) => {
+        const idx = BOT[Math.min(i, BOT.length - 1)];
+        const fp = PORT_ENUM[e.f][idx];
+        portAssign.set(e.key, { fp, tp: null });
+        usePort(e.f, idx, 1);
+      });
+    });
+    Object.values(ins).forEach(list => {
+      list.sort((a, b) => pos[a.f].x - pos[b.f].x);
+      list.forEach((e) => {
+        const cur = portAssign.get(e.key);
+        // 入口避开已占用的顶/侧口
+        let idx = TOP.find(j => (portUse.get(e.t + ":" + j) || 0) === 0);
+        if (idx === undefined) idx = TOP[Math.min(list.indexOf(e), TOP.length - 1)];
+        cur.tp = PORT_ENUM[e.t][idx];
+        usePort(e.t, idx, 1);
+        refreshEdge(e, cur.fp, cur.tp);
+      });
+    });
+  };
+  const totalCost = () => {
+    let c = 0;
+    const all = fwdEdges.map(e => ({ pts: edgeSamples.get(e.key) })).filter(x => x.pts);
+    for (let i = 0; i < all.length; i++) {
+      for (let j = i + 1; j < all.length; j++) c += polyCross(all[i].pts, all[j].pts) * 10;
+    }
+    fwdEdges.forEach(e => {
+      const pts = edgeSamples.get(e.key);
+      if (pts) c += polyHitsNode(pts, e.f, e.t) * 40;
+    });
+    portUse.forEach(n => { if (n > 1) c += 50 * (n - 1); }); // 端口复用惩罚
+    return c;
+  };
+  const optimizePorts = () => {
+    if (!fwdEdges.length) return 0; // 无前向边（如实时视图首帧），无需优化
+    initAssign();
+    // 随机扰动重启：贪心单序列易陷局部最优（一条边占了好端口堵死另一条），
+    // 每轮随机换 3 条边到随机端口再贪心，保留全程代价最低的分配。
+    let bestCost = totalCost();
+    let bestSnapshot = null;
+    const snapshot = () => {
+      const s = new Map();
+      fwdEdges.forEach(e => {
+        const a = portAssign.get(e.key);
+        if (a && a.fp && a.tp) s.set(e.key, { fp: a.fp, tp: a.tp });
+      });
+      return s;
+    };
+    const restore = (snap) => {
+      portUse.clear();
+      fwdEdges.forEach(e => {
+        const a = snap.get(e.key);
+        if (!a) return;
+        portAssign.set(e.key, a);
+        if (PORT_ENUM[e.f] && PORT_ENUM[e.t]) {
+          usePort(e.f, PORT_ENUM[e.f].indexOf(a.fp), 1);
+          usePort(e.t, PORT_ENUM[e.t].indexOf(a.tp), 1);
+        }
+        refreshEdge(e, a.fp, a.tp);
+      });
+    };
+    for (let restart = 0; restart < 5; restart++) {
+      if (restart > 0) {
+        // 扰动：随机 3 条边换到随机端口（只挑有分配的边）
+        for (let k = 0; k < 3; k++) {
+          const e = fwdEdges[Math.floor(Math.random() * fwdEdges.length)];
+          const a = portAssign.get(e.key);
+          if (!a || !PORT_ENUM[e.f] || !PORT_ENUM[e.t]) continue;
+          usePort(e.f, PORT_ENUM[e.f].indexOf(a.fp), -1);
+          usePort(e.t, PORT_ENUM[e.t].indexOf(a.tp), -1);
+          const fi = Math.floor(Math.random() * PORT_ENUM[e.f].length);
+          const ti = Math.floor(Math.random() * PORT_ENUM[e.t].length);
+          a.fp = PORT_ENUM[e.f][fi]; a.tp = PORT_ENUM[e.t][ti];
+          usePort(e.f, fi, 1); usePort(e.t, ti, 1);
+          refreshEdge(e, a.fp, a.tp);
+        }
+      }
+      let improved = true, round = 0;
+      while (improved && round++ < 8) {
+        improved = false;
+        fwdEdges.forEach(e => {
+          const cur = portAssign.get(e.key);
+          if (!cur || !PORT_ENUM[e.f] || !PORT_ENUM[e.t]) return;
+          const fPorts = PORT_ENUM[e.f], tPorts = PORT_ENUM[e.t];
+          // 释放当前占用，重新选最优组合
+          const curF = fPorts.indexOf(cur.fp), curT = tPorts.indexOf(cur.tp);
+          usePort(e.f, curF, -1); usePort(e.t, curT, -1);
+          // 本边与其余边的代价（不含自身穿节点部分，逐候选重算）
+          const others = fwdEdges.filter(o => o !== e).map(o => ({ pts: edgeSamples.get(o.key) }));
+          let best = null;
+          for (let fi = 0; fi < fPorts.length; fi++) {
+            const fUsed = portUse.get(e.f + ":" + fi) || 0;
+            const fUp = fPorts[fi].ny < 0 || fPorts[fi].nx !== 0; // 出口在顶/侧边
+            for (let ti = 0; ti < tPorts.length; ti++) {
+              const tUsed = portUse.get(e.t + ":" + ti) || 0;
+              const tDown = tPorts[ti].ny > 0 || tPorts[ti].nx !== 0; // 入口在底/侧边
+              const fp = fPorts[fi], tp = tPorts[ti];
+              const cand = segSample(portSegs(fp, tp, waypoints && waypoints.get(e.key)));
+              // 代价：穿节点（重）+ 交叉（中）+ 端口复用（轻）+ 逆流方向（轻）。
+              // 前向边语义是「上游→下游」，从顶/侧边出、进底/侧边都是逆流，
+              // 不惩罚会出现「从节点顶出向上冲再折回」的怪异路径。
+              let c = polyHitsNode(cand, e.f, e.t) * 40;
+              others.forEach(o => { c += polyCross(cand, o.pts) * 10; });
+              c += (fUsed + tUsed) * 6;
+              c += (fUp ? 8 : 0) + (tDown ? 8 : 0);
+              if (best === null || c < best.c) best = { c, fp, tp, fi, ti };
+            }
+          }
+          if (best && best.fp) {
+            portAssign.set(e.key, { fp: best.fp, tp: best.tp });
+            usePort(e.f, best.fi, 1); usePort(e.t, best.ti, 1);
+            refreshEdge(e, best.fp, best.tp);
+            if (best.fp !== cur.fp || best.tp !== cur.tp) improved = true;
+          } else {
+            // 全被占（度数超端口数）：放回原位
+            usePort(e.f, curF, 1); usePort(e.t, curT, 1);
+          }
+        });
+      }
+      const c = totalCost();
+      if (c < bestCost) { bestCost = c; bestSnapshot = snapshot(); }
+    }
+    if (bestSnapshot) restore(bestSnapshot);
+    return bestCost;
   };
 
   // 三次贝塞尔曲线边（draw.io / react-flow 的默认策略）：
@@ -1388,6 +1656,7 @@ function drawEdges(svg, edges, pos, NODE_W, NODE_H, loopEdges, decById, waypoint
     out.push(corners[corners.length - 1]);
     return out.slice(1, -1); // 不含起终点
   };
+  optimizePorts(); // 端口分配爬山优化（依赖 curveHitsNode，须在其后调用）
   const _mkPath = (from, to, cls, strokeColor, opts) => {
     const a = pos[from], b = pos[to];
     if (!a || !b) return;
@@ -1395,57 +1664,82 @@ function drawEdges(svg, edges, pos, NODE_W, NODE_H, loopEdges, decById, waypoint
     let splinePts = null;  // A* 绕障路径（Catmull-Rom 平滑），兜底用
     let multiSegs = null;  // 中转点逐段贝塞尔（跨层长边）
     if (!opts.up) {
-      // 前向边：源底部端口 → 目标顶部端口（形状感知）。
-      // 跨层长边（>1 层）带布局阶段算好的中转点（虚拟节点位置），
-      // 逐段下行——既不横穿整层节点，也不绕画布边缘。
-      p0 = portBottom(from, fwdOutOff.get(from + "=>" + to) || 0);
-      p3 = portTop(to, fwdInOff.get(from + "=>" + to) || 0);
-      const via = (waypoints && waypoints.get(from + "=>" + to)) || null;
-      const dy = p3.y - p0.y, dx = p3.x - p0.x;
-      if (via && via.length) {
-        // 途经中转点：逐段三次贝塞尔（与普通前向边同形的垂直 S 曲线），
-        // 段间控制点对称（一阶连续）。不用 Catmull-Rom 全局样条——
-        // 其切线由邻点外推，长水平段会过冲、重新扫进旁边的节点。
-        const chain = [p0, ...via, p3];
-        const segs = [];
-        for (let i = 0; i < chain.length - 1; i++) {
-          const a = chain[i], c = chain[i + 1];
-          const sdy = c.y - a.y;
-          const gap = Math.min(Math.max(sdy * 0.45, 30), 90);
-          segs.push([a, { x: a.x, y: a.y + gap }, { x: c.x, y: c.y - gap }, c]);
+      // 前向边：端口由爬山优化器分配（矩形 8 口 / 菱形 4 角），
+      // 曲线沿端口法线方向出入；跨层长边带布局阶段算好的中转点逐段下行。
+      const assign = portAssign.get(from + "=>" + to);
+      if (assign && assign.fp && assign.tp) {
+        p0 = assign.fp;
+        p3 = assign.tp;
+        const via = (waypoints && waypoints.get(from + "=>" + to)) || null;
+        if (via && via.length) {
+          multiSegs = portSegs(p0, p3, via);
+        } else {
+          const segs = portSegs(p0, p3, null);
+          c1 = segs[0][1]; c2 = segs[0][2];
         }
-        multiSegs = segs;
-      } else if (dy > 40) {
-        // 下行：垂直 S 曲线（少量水平分量适配斜跨列）
-        const gap = Math.min(Math.max(dy * 0.45, 36), 110) + (opts.jitter || 0);
-        c1 = { x: p0.x + dx * 0.1, y: p0.y + gap };
-        c2 = { x: p3.x - dx * 0.1, y: p3.y - gap };
       } else {
-        // 同层/近同层：水平 S 曲线
-        c1 = { x: p0.x + dx * 0.4, y: p0.y };
-        c2 = { x: p3.x - dx * 0.4, y: p3.y };
+        // 优化器未覆盖（端口全被占等）：回退到底/顶端口直连
+        p0 = portBottom(from, fwdOutOff.get(from + "=>" + to) || 0);
+        p3 = portTop(to, fwdInOff.get(from + "=>" + to) || 0);
       }
-      // 「是」标签：起点沿初始方向偏移，避开曲线
+      const dy = p3.y - p0.y, dx = p3.x - p0.x;
+      if (!assign || !assign.fp || !multiSegs) {
+        if (dy > 40) {
+          // 下行：垂直 S 曲线（少量水平分量适配斜跨列）
+          const gap = Math.min(Math.max(dy * 0.45, 36), 110) + (opts.jitter || 0);
+          c1 = { x: p0.x + dx * 0.1, y: p0.y + gap };
+          c2 = { x: p3.x - dx * 0.1, y: p3.y - gap };
+        } else {
+          // 同层/近同层：水平 S 曲线
+          c1 = { x: p0.x + dx * 0.4, y: p0.y };
+          c2 = { x: p3.x - dx * 0.4, y: p3.y };
+        }
+      }
+      // 「是」标签：从起点沿端口法线方向偏移，避开曲线
       if (opts.label) {
-        labelPos = dy > 40
+        const nx = p0.nx !== undefined ? p0.nx : 0, ny = p0.ny !== undefined ? p0.ny : 1;
+        labelPos = ny > 0
           ? { x: p0.x - 7, y: p0.y + 20, anchor: "end" }
-          : { x: p0.x + (dx > 0 ? 10 : -10), y: p0.y + 4, anchor: dx > 0 ? "start" : "end" };
+          : ny < 0
+            ? { x: p0.x - 7, y: p0.y - 12, anchor: "end" }
+            : { x: p0.x + (nx > 0 ? 12 : -12), y: p0.y - 4, anchor: nx > 0 ? "start" : "end" };
         labelText = opts.label.text;
       }
-      // —— 兜底避让：直连曲线（无中转点）穿过第三者节点时改走 A* 绕障 ——
-      // 有中转点的边走逐段贝塞尔（不穿节点），无中转点命中时由 routeAround 兜底。
-      if (!multiSegs) {
-        let hits = 0;
-        for (let i = 1; i < 10; i++) {
-          const t = i / 10, mt = 1 - t;
-          const px = mt * mt * mt * p0.x + 3 * mt * mt * t * c1.x + 3 * mt * t * t * c2.x + t * t * t * p3.x;
-          const py = mt * mt * mt * p0.y + 3 * mt * mt * t * c1.y + 3 * mt * t * t * c2.y + t * t * t * p3.y;
-          const h = curveHitsNode(px, py);
-          if (h && h.id !== from && h.id !== to) { hits = 1; break; }
+      // —— 兜底避让：无论有无中转点，曲线穿过第三者节点都交给 A* 绕障 ——
+      // 有中转点的边通常不穿节点，但中转链与出端口之间可能被同层节点挡住
+      // （如长边首段斜穿右上角的节点）——采样检测，命中即整体改走 A* 路径。
+      {
+        const pts = multiSegs
+          ? multiSegs.flatMap(([a, ca, cb, c]) => {
+              const out = [];
+              for (let i = 0; i <= 10; i++) {
+                const t = i / 10, mt = 1 - t;
+                out.push({
+                  x: mt * mt * mt * a.x + 3 * mt * mt * t * ca.x + 3 * mt * t * t * cb.x + t * t * t * c.x,
+                  y: mt * mt * mt * a.y + 3 * mt * mt * t * ca.y + 3 * mt * t * t * cb.y + t * t * t * c.y,
+                });
+              }
+              return out;
+            })
+          : (() => {
+              const out = [];
+              for (let i = 1; i < 10; i++) {
+                const t = i / 10, mt = 1 - t;
+                out.push({
+                  x: mt * mt * mt * p0.x + 3 * mt * mt * t * c1.x + 3 * mt * t * t * c2.x + t * t * t * p3.x,
+                  y: mt * mt * mt * p0.y + 3 * mt * mt * t * c1.y + 3 * mt * t * t * c2.y + t * t * t * p3.y,
+                });
+              }
+              return out;
+            })();
+        let hitNode = null;
+        for (const pt of pts) {
+          const h = curveHitsNode(pt.x, pt.y);
+          if (h && h.id !== from && h.id !== to) { hitNode = h; break; }
         }
-        if (hits) {
+        if (hitNode) {
           const av = routeAround(from, to, p0, p3);
-          if (av && av.length) splinePts = [p0, ...av, p3];
+          if (av && av.length) { splinePts = [p0, ...av, p3]; multiSegs = null; }
         }
       }
     } else {
