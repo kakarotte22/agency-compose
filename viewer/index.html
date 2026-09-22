@@ -149,7 +149,7 @@ body::after {
   border-left-color: var(--seal);
   box-shadow: 0 3px 12px rgba(31,45,42,0.08);
 }
-.case-item .name { font-size: 14px; font-weight: 600; color: var(--ink); line-height: 1.35; }
+.case-item .name { font-size: 14px; font-weight: 600; color: var(--ink); line-height: 1.35; padding-right: 26px; }
 .case-item.active .name { color: var(--seal); }
 .case-item .meta {
   font-family: var(--font-mono); font-size: 10px; color: var(--ink-dim);
@@ -163,6 +163,19 @@ body::after {
 .status-dot.ok { background: var(--ok); }
 .status-dot.bad { background: var(--bad); }
 .status-dot.na { background: var(--ink-dim); }
+
+/* 档案删除按钮：hover 卡片时浮现，点中气泡变红 */
+.case-item .case-del {
+  position: absolute; top: 8px; right: 8px;
+  width: 20px; height: 20px; padding: 0; border-radius: 4px;
+  border: 1px solid transparent; background: transparent;
+  color: var(--ink-dim); font-size: 12px; line-height: 1;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; opacity: 0;
+  transition: opacity .15s ease, background .15s ease, color .15s ease, border-color .15s ease;
+}
+.case-item:hover .case-del { opacity: 1; }
+.case-item .case-del:hover { background: var(--bad); border-color: var(--bad); color: #fff; }
 
 .sidebar-foot {
   padding: 14px 20px; border-top: 1px solid var(--line);
@@ -223,23 +236,38 @@ body::after {
 .legend-item { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--ink-soft); font-family: var(--font-mono); }
 .legend-item .sw { width: 10px; height: 10px; border-radius: 2px; }
 
-/* 自动排版按钮 */
-.dag-reset-btn {
-  position: sticky; bottom: 16px; right: 16px; float: right; margin-top: -40px;
-  padding: 7px 12px; border-radius: 6px; cursor: pointer;
+/* 画布控件组：缩放 + 自动排版 */
+.canvas-ctrl {
+  position: sticky; bottom: 16px; float: right; margin-top: -40px;
+  display: inline-flex; align-items: center; gap: 2px;
+  padding: 4px; border-radius: 6px;
   background: rgba(255,255,255,0.92); backdrop-filter: blur(6px);
-  border: 1px solid var(--line); color: var(--ink);
-  font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.5px;
+  border: 1px solid var(--line); z-index: 3;
   box-shadow: 0 2px 8px rgba(31,45,42,0.06);
-  transition: all .15s ease; z-index: 3;
 }
-.dag-reset-btn:hover { border-color: var(--accent); color: var(--accent-deep); }
-.dag-reset-btn:active { transform: translateY(1px); }
+.canvas-ctrl .zoom-btn, .canvas-ctrl .dag-reset-btn {
+  padding: 5px 8px; border-radius: 4px; cursor: pointer; line-height: 1.4;
+  border: 1px solid transparent; background: transparent; color: var(--ink);
+  font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.5px;
+  transition: all .15s ease;
+}
+.canvas-ctrl .zoom-btn { width: 26px; font-size: 13px; padding: 4px 0; }
+.canvas-ctrl .zoom-btn:hover, .canvas-ctrl .dag-reset-btn:hover {
+  border-color: var(--accent); color: var(--accent-deep); background: var(--paper-2);
+}
+.canvas-ctrl .zoom-btn:active, .canvas-ctrl .dag-reset-btn:active { transform: translateY(1px); }
+.canvas-ctrl .zoom-pct {
+  font-family: var(--font-mono); font-size: 10px; color: var(--ink-dim);
+  min-width: 38px; text-align: center; cursor: pointer; user-select: none;
+  padding: 5px 2px; border-radius: 4px;
+}
+.canvas-ctrl .zoom-pct:hover { color: var(--ink); background: var(--paper-2); }
 
 /* ============ SVG 节点与边 ============ */
 .node { cursor: grab; }
 .node:active { cursor: grabbing; }
-.node.dragging { cursor: grabbing; }
+/* 拖拽时禁用入场动画：CSS animation 会覆盖 transform 属性，导致拖拽重排失效 */
+.node.dragging { cursor: grabbing; animation: none; }
 .node.dragging .node-card { stroke: var(--accent); stroke-width: 2; }
 .node .node-card {
   fill: var(--surface);
@@ -603,7 +631,12 @@ body::after {
       <div class="canvas-wrap" id="canvasWrap">
         <svg class="dag-svg" id="dag" xmlns="http://www.w3.org/2000/svg"></svg>
         <div class="legend" id="legend"></div>
-        <button class="dag-reset-btn" id="dagResetBtn" title="重新自动排版">⤾ 自动排版</button>
+        <div class="canvas-ctrl">
+          <button class="zoom-btn" id="zoomOutBtn" title="缩小">−</button>
+          <span class="zoom-pct" id="zoomPct" title="点击复位 100%">100%</span>
+          <button class="zoom-btn" id="zoomInBtn" title="放大">＋</button>
+          <button class="dag-reset-btn" id="dagResetBtn" title="重新自动排版">⤾ 自动排版</button>
+        </div>
       </div>
     </div>
 
@@ -640,6 +673,11 @@ body::after {
           <div class="dag-hint" id="dagHint" style="display:flex">
             <div class="spinner" style="display:none"></div>
             <div>输入需求后，这里将展示任务流</div>
+          </div>
+          <div class="canvas-ctrl">
+            <button class="zoom-btn" id="zoomOutBtnLive" title="缩小">−</button>
+            <span class="zoom-pct" id="zoomPctLive" title="点击复位 100%">100%</span>
+            <button class="zoom-btn" id="zoomInBtnLive" title="放大">＋</button>
           </div>
         </div>
       </div>
@@ -707,11 +745,61 @@ function renderSidebar(cases) {
     div.dataset.dir = c.dir;
     const status = c.has_result ? '<span class="status-dot ok"></span>' : '<span class="status-dot na"></span>';
     div.innerHTML = `
+      <button class="case-del" title="删除该任务流档案">✕</button>
       <div class="name">${esc(c.name)}</div>
       <div class="meta">${status}<span>${c.total_steps} 步</span><span>${fmtTs(c.ts)}</span></div>`;
     div.addEventListener("click", () => selectCase(c.dir, div));
+    div.querySelector(".case-del").addEventListener("click", (ev) => {
+      ev.stopPropagation(); // 不触发卡片选中
+      deleteCase(c);
+    });
     el.appendChild(div);
   });
+}
+
+async function deleteCase(c) {
+  // 正在被编排写入的档案不能删：编排进程还在往目录写文件
+  if (c.dir === composeState.liveCaseDir) {
+    alert("该档案正在被当前编排写入，暂不能删除。");
+    return;
+  }
+  if (!confirm(`确定删除档案「${c.name}」？\ncases/${c.dir} 将被永久删除，不可恢复。`)) return;
+
+  try {
+    const res = await fetch("/api/case/" + encodeURIComponent(c.dir), { method: "DELETE" });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || data.error) throw new Error(data.error || `DELETE ${res.status}`);
+  } catch (e) {
+    alert("删除失败：" + e.message);
+    return;
+  }
+
+  // 刷新侧栏
+  const cases = await loadCases();
+  renderSidebar(cases);
+
+  if (currentData && currentData.case && currentData.case.dir === c.dir) {
+    // 删除的是当前正在看的档案：自动选中下一个（有结果的优先）
+    const next = cases.find(x => x.has_result) || cases[0];
+    if (next) {
+      const item = document.querySelector(`.case-item[data-dir="${CSS.escape(next.dir)}"]`);
+      await selectCase(next.dir, item);
+    } else {
+      // 档案删完了：回到空态
+      currentData = null;
+      selectedId = null;
+      $("#caseTitle").textContent = "暂无历史任务";
+      $("#caseObjective").textContent = "切换到「编排」页发起第一次编排，跑完的任务会出现在左侧列表。";
+      $("#kpis").innerHTML = "";
+      $("#legend").innerHTML = "";
+      $("#dag").innerHTML = "";
+      setDrawer(null);
+    }
+  } else if (currentData && currentData.case) {
+    // 删除的不是当前档案：恢复原高亮
+    const item = document.querySelector(`.case-item[data-dir="${CSS.escape(currentData.case.dir)}"]`);
+    if (item) item.classList.add("active");
+  }
 }
 
 function fmtTs(ts) {
@@ -1983,6 +2071,7 @@ function renderDag(data, svgId = "#dag", interactive = true) {
   svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
   svg.setAttribute("width", width);
   svg.setAttribute("height", height);
+  applyViewZoom(svg);
 
   // ---- 边（画在节点下方）----
   drawEdges(svg, g.forwardEdges, pos, NODE_W, NODE_H, g.loopEdges, g.decById, waypoints);
@@ -2151,6 +2240,76 @@ function svgPoint(svg, clientX, clientY) {
   return ctm ? pt.matrixTransform(ctm.inverse()) : pt;
 }
 
+/* ============================ 画布缩放 ============================ */
+// 缩放用 CSS 尺寸实现：SVG 的 viewBox/width/height 属性保持布局真值，
+// style.width/height 在其上叠加缩放，getScreenCTM 自动含缩放，拖拽/点击坐标不受影响。
+const ZOOM_MIN = 0.25, ZOOM_MAX = 3;
+// 按钮步进档位：固定序列，避免连续乘除的浮点累积误差
+const ZOOM_PRESETS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 2.5, 3];
+let viewZoom = 1;   // 浏览 / 编排两个 DAG 共用缩放比例
+
+function applyViewZoom(svg) {
+  const w = parseFloat(svg.getAttribute("width")) || 0;
+  if (w) {
+    svg.style.width = (w * viewZoom) + "px";
+    svg.style.height = (parseFloat(svg.getAttribute("height") || 0) * viewZoom) + "px";
+  }
+}
+
+function setViewZoom(z) {
+  viewZoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, z));
+  ["#dag", "#liveDag"].forEach(sel => {
+    const svg = $(sel);
+    if (svg) applyViewZoom(svg);
+  });
+  document.querySelectorAll(".zoom-pct").forEach(el => {
+    el.textContent = Math.round(viewZoom * 100) + "%";
+  });
+}
+
+// 以画布上某点（视口坐标）为锚缩放：缩放前后锚点下的内容保持不动
+function zoomAtPoint(container, clientX, clientY, factor) {
+  const rect = container.getBoundingClientRect();
+  const px = clientX - rect.left + container.scrollLeft;
+  const py = clientY - rect.top + container.scrollTop;
+  const oldZ = viewZoom;
+  setViewZoom(viewZoom * factor);
+  const ratio = viewZoom / oldZ;
+  container.scrollLeft = px * ratio - (clientX - rect.left);
+  container.scrollTop = py * ratio - (clientY - rect.top);
+}
+
+// 以容器中心为锚跳到指定档位（一次精确设置，无累积误差）
+function zoomToPreset(container, preset) {
+  const rect = container.getBoundingClientRect();
+  const anchorX = rect.left + rect.width / 2, anchorY = rect.top + rect.height / 2;
+  const px = anchorX - rect.left + container.scrollLeft;
+  const py = anchorY - rect.top + container.scrollTop;
+  const oldZ = viewZoom;
+  setViewZoom(preset);
+  const ratio = viewZoom / oldZ;
+  container.scrollLeft = px * ratio - (anchorX - rect.left);
+  container.scrollTop = py * ratio - (anchorY - rect.top);
+}
+
+// 按钮步进：按档位序列上/下一档
+function zoomByPreset(container, dir) {
+  const cur = viewZoom;
+  const next = dir > 0
+    ? ZOOM_PRESETS.find(v => v > cur + 1e-9)
+    : [...ZOOM_PRESETS].reverse().find(v => v < cur - 1e-9);
+  if (next !== undefined) zoomToPreset(container, next);
+}
+
+// Ctrl/Cmd + 滚轮 = 缩放（裸滚轮仍是画布滚动）
+function attachZoomWheel(container) {
+  container.addEventListener("wheel", (ev) => {
+    if (!ev.ctrlKey && !ev.metaKey) return;
+    ev.preventDefault();
+    zoomAtPoint(container, ev.clientX, ev.clientY, Math.exp(-ev.deltaY * 0.0016));
+  }, { passive: false });
+}
+
 // 拖拽状态
 let dragState = null;
 
@@ -2184,6 +2343,18 @@ function fitToContent(svg, NODE_W, NODE_H) {
   svg.setAttribute("viewBox", `${minX} ${minY} ${w} ${h}`);
   svg.setAttribute("width", w);
   svg.setAttribute("height", h);
+  applyViewZoom(svg);
+}
+
+// 拖拽期间边线重绘的 rAF 节流：mousemove 事件频率可能高于帧率，全图重算每帧一次即可
+let dragRafPending = false;
+function scheduleDragRedraw(svg) {
+  if (dragRafPending) return;
+  dragRafPending = true;
+  requestAnimationFrame(() => {
+    dragRafPending = false;
+    if (displayG) drawEdges(svg, displayG.forwardEdges, dagPos, dagDims.NODE_W, dagDims.NODE_H, displayG.loopEdges, displayG.decById, dagWaypoints);
+  });
 }
 
 function setupDragListeners(svg) {
@@ -2198,8 +2369,10 @@ function setupDragListeners(svg) {
     const nx = p.x + dx, ny = p.y + dy;
     dagPos[id] = { x: nx, y: ny };
     nodeEl.setAttribute("transform", `translate(${nx}, ${ny})`);
-    if (displayG) drawEdges(svg, displayG.forwardEdges, dagPos, dagDims.NODE_W, dagDims.NODE_H, displayG.loopEdges, displayG.decById, dagWaypoints);
-    fitToContent(svg, dagDims.NODE_W, dagDims.NODE_H);
+    // 拖拽中不调 fitToContent：其每帧重算 viewBox 原点，若被拖节点恰是
+    // 最左/最上节点，原点会追着它平移，抵消视觉位移造成「跟不住鼠标」。
+    // 边线重绘按帧节流，画布收拢推迟到 mouseup 一次完成。
+    scheduleDragRedraw(svg);
   });
   document.addEventListener("mouseup", (ev) => {
     if (!dragState) return;
@@ -2209,7 +2382,10 @@ function setupDragListeners(svg) {
     const id = dragState.id;
     dragState = null;
     // 若非拖拽，视为点击选中
-    if (!moved) selectNode(id);
+    if (!moved) { selectNode(id); return; }
+    // 拖拽收尾：重绘边线（兜底最后一个 rAF 尚未执行的帧）+ 画布收拢一次完成
+    if (displayG) drawEdges(svg, displayG.forwardEdges, dagPos, dagDims.NODE_W, dagDims.NODE_H, displayG.loopEdges, displayG.decById, dagWaypoints);
+    fitToContent(svg, dagDims.NODE_W, dagDims.NODE_H);
   });
 }
 
@@ -2300,6 +2476,7 @@ function resetDagLayout() {
   svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
   svg.setAttribute("width", width);
   svg.setAttribute("height", height);
+  applyViewZoom(svg);
   svg.querySelectorAll(".node").forEach(nodeEl => {
     const p = pos[nodeEl.dataset.id];
     if (p) nodeEl.setAttribute("transform", `translate(${p.x}, ${p.y})`);
@@ -2308,6 +2485,7 @@ function resetDagLayout() {
 }
 
 async function selectCase(dir, itemEl) {
+  switchTab("browse"); // 点档案直接跳到浏览视图（无需先手动点【浏览】）
   $("#loading").style.display = "flex";
   try {
     currentData = await loadCase(dir);
@@ -2347,7 +2525,16 @@ async function selectCase(dir, itemEl) {
 
 /* ============================ 初始化 ============================ */
 (async function init() {
-  const cases = await loadCases();
+  let cases = [];
+  try {
+    cases = await loadCases();
+  } catch (e) {
+    // 服务不可用：给出可读提示，而非 loading 无限转圈
+    $("#loading").style.display = "none";
+    $("#caseTitle").textContent = "服务不可用";
+    $("#caseObjective").textContent = "无法获取任务列表：" + e.message + "　请确认 viewer 服务已启动。";
+    return;
+  }
   renderSidebar(cases);
   if (!cases.length) {
     $("#caseTitle").textContent = "暂无历史任务";
@@ -2369,6 +2556,17 @@ $("#canvasWrap").addEventListener("click", (ev) => {
   if (ev.target === $("#canvasWrap") || ev.target === $("#dag")) { selectedId = null; deselect(); }
 });
 $("#dagResetBtn").addEventListener("click", () => { selectedId = null; deselect(); resetDagLayout(); });
+
+// 画布缩放：Ctrl/Cmd+滚轮 + 工具条按钮 + 点百分比复位
+attachZoomWheel($("#canvasWrap"));
+attachZoomWheel($("#composeDag"));
+$("#zoomInBtn").addEventListener("click", () => zoomByPreset($("#canvasWrap"), 1));
+$("#zoomOutBtn").addEventListener("click", () => zoomByPreset($("#canvasWrap"), -1));
+$("#zoomInBtnLive").addEventListener("click", () => zoomByPreset($("#composeDag"), 1));
+$("#zoomOutBtnLive").addEventListener("click", () => zoomByPreset($("#composeDag"), -1));
+document.querySelectorAll(".zoom-pct").forEach(el => {
+  el.addEventListener("click", () => setViewZoom(1));
+});
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") { selectedId = null; deselect(); } });
 
 /* ============================ 编排工作台 ============================ */
@@ -2391,16 +2589,15 @@ const agentCallRoles = new Map();
 // 已消费的最大事件序号：刷新恢复场景下，SSE 重连后跳过回放日志里已有的事件
 let lastEventSeq = 0;
 
-// Tab 切换
+// Tab 切换（tab 按钮与左侧档案点选共用：点档案直接切到浏览视图）
+function switchTab(v) {
+  document.querySelectorAll("#tabbar .tab").forEach(t => t.classList.toggle("active", t.dataset.view === v));
+  $("#browseView").classList.toggle("active", v === "browse");
+  $("#browseView").classList.toggle("hidden", v !== "browse");
+  $("#composeView").classList.toggle("active", v === "compose");
+}
 document.querySelectorAll("#tabbar .tab").forEach(tab => {
-  tab.addEventListener("click", () => {
-    document.querySelectorAll("#tabbar .tab").forEach(t => t.classList.remove("active"));
-    tab.classList.add("active");
-    const v = tab.dataset.view;
-    $("#browseView").classList.toggle("active", v === "browse");
-    $("#browseView").classList.toggle("hidden", v !== "browse");
-    $("#composeView").classList.toggle("active", v === "compose");
-  });
+  tab.addEventListener("click", () => switchTab(tab.dataset.view));
 });
 
 function resetPipeline() {
@@ -2435,6 +2632,9 @@ function logTime() {
   return new Date().toTimeString().slice(0, 8);
 }
 
+// 日志 DOM 上限：超出后移除最老节点，防止长时间编排 DOM 无限增长
+const MAX_LOG_DOM = 3000;
+
 function appendLog(kind, text, tag) {
   const consoleEl = $("#console");
   const line = document.createElement("div");
@@ -2442,6 +2642,7 @@ function appendLog(kind, text, tag) {
   let tagHtml = tag ? `<span class="log-tag">${esc(tag)}</span>` : "";
   line.innerHTML = `<span class="log-time">${logTime()}</span>${tagHtml}<span class="log-body">${esc(text)}</span>`;
   consoleEl.appendChild(line);
+  while (consoleEl.childElementCount > MAX_LOG_DOM) consoleEl.firstChild.remove();
   // 自动滚动到底部
   consoleEl.scrollTop = consoleEl.scrollHeight;
   composeState.logCount++;
