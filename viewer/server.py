@@ -9,12 +9,15 @@
   GET  /                       -> viewer/index.html（静态页面）
   GET  /api/cases              -> cases/ 下所有任务摘要列表
   GET  /api/case/<dir>         -> 单个 case 的完整结构化数据
+  DELETE /api/case/<dir>       -> 删除单个 case 目录（不可恢复）
   POST /api/compose/start      -> 发起一次编排（body: {"requirement": "..."}）
   GET  /api/compose/events?run_id=xxx  -> SSE 订阅某次编排的事件流
   POST /api/compose/stop       -> 取消某次编排（body: {"run_id": "..."}）
 """
 import json
+import os
 import queue
+import shutil
 import signal
 import sys
 import threading
@@ -34,13 +37,16 @@ INDEX_PATH = VIEWER_DIR / "index.html"
 # run_id -> {queue, cancel_event, status, thread}
 RUNS = {}
 RUNS_LOCK = threading.Lock()
-# 事件队列上限，防止前端断开时内存暴涨
-MAX_QUEUE = 5000
+# 事件队列上限，防止前端断开时内存暴涨（可用环境变量按场景调整）
+MAX_QUEUE = int(os.environ.get("VIEWER_MAX_QUEUE", "5000"))
 # 订阅者全部离开后，延迟取消的宽限期（秒）：
 # 页面刷新会立刻带着 run_id 重连 SSE，给这段时间避免误杀正在跑的编排
-SUBSCRIBER_GRACE = 8
+SUBSCRIBER_GRACE = float(os.environ.get("VIEWER_SUBSCRIBER_GRACE", "8"))
 # 已结束 run 的保留个数（每个最多 MAX_QUEUE 条事件），防止 RUNS 无限增长
-KEEP_FINISHED_RUNS = 20
+KEEP_FINISHED_RUNS = int(os.environ.get("VIEWER_KEEP_FINISHED_RUNS", "20"))
+
+# 只接受本机地址的 Host 头（防 DNS rebinding 从外部域名打到本机服务）
+ALLOWED_HOSTS = ("127.0.0.1", "localhost", "::1")
 
 
 def _make_run():
@@ -100,7 +106,66 @@ def _shutdown_runs():
             t.join(timeout=10)
 
 
+# ===== case 解析缓存 =====
+# 编排轮询每 2 秒拉一次 /api/cases 与 /api/case/<dir>，每次都全量重解析。
+# 缓存指纹 = 目录树全部文件的 mtime_ns 之和 + 文件数：任一文件写入（含编排中
+# 每步追加日志/产出）都会使指纹变化并触发重解析；指纹命中则直接返回旧结果。
+
+_CASES_FP = None
+_CASES_LIST = None
+_CASE_CACHE = {}   # case_dir -> (fp, data)
+_ROLE_MAP_CACHE = None
+
+
+def _dir_fingerprint(d):
+    total, n = 0, 0
+    for p in d.rglob("*"):
+        try:
+            if p.is_file():
+                total += p.stat().st_mtime_ns
+                n += 1
+        except OSError:
+            pass
+    return (total, n)
+
+
+def _role_map_cached():
+    global _ROLE_MAP_CACHE
+    if _ROLE_MAP_CACHE is None:
+        _ROLE_MAP_CACHE = parse_case._load_role_map()
+    return _ROLE_MAP_CACHE
+
+
+def _list_cases_cached():
+    global _CASES_FP, _CASES_LIST
+    fp = _dir_fingerprint(parse_case.CASES_DIR) if parse_case.CASES_DIR.exists() else (0, 0)
+    if fp != _CASES_FP:
+        _CASES_FP = fp
+        _CASES_LIST = parse_case.list_cases()
+        # 顺手清掉已删除 case 的缓存条目，防 _CASE_CACHE 无限增长
+        alive = {c["dir"] for c in _CASES_LIST}
+        for k in list(_CASE_CACHE):
+            if k not in alive:
+                del _CASE_CACHE[k]
+    return _CASES_LIST
+
+
+def _parse_case_cached(case_dir):
+    fp = _dir_fingerprint(parse_case.CASES_DIR / case_dir)
+    hit = _CASE_CACHE.get(case_dir)
+    if hit and hit[0] == fp:
+        return hit[1]
+    data = parse_case.parse_case(parse_case.CASES_DIR / case_dir, _role_map_cached())
+    _CASE_CACHE[case_dir] = (fp, data)
+    return data
+
+
 class Handler(BaseHTTPRequestHandler):
+    def _guard_host(self):
+        """防 DNS rebinding：Host 头必须落在本机地址，否则拒绝服务。"""
+        hostname = (self.headers.get("Host") or "").split(":")[0]
+        return hostname in ALLOWED_HOSTS
+
     def _send_json(self, obj, status=200):
         body = json.dumps(obj, ensure_ascii=False).encode("utf-8")
         self.send_response(status)
@@ -127,7 +192,29 @@ class Handler(BaseHTTPRequestHandler):
         except json.JSONDecodeError:
             return {}
 
+    def _resolve_case_dir(self, case_dir):
+        """校验并解析 case 目录路径，返回 (target, error_json, error_status)。
+
+        拒绝路径穿越（../、嵌套路径、符号链接逃逸）；GET 与 DELETE 共用同一套校验，
+        避免两处规则漂移。
+        """
+        if not case_dir:
+            return None, {"error": "missing case dir"}, 400
+        if ".." in case_dir or "/" in case_dir or "\\" in case_dir:
+            return None, {"error": "invalid case dir"}, 400
+        target = (parse_case.CASES_DIR / case_dir).resolve()
+        try:
+            target.relative_to(parse_case.CASES_DIR.resolve())
+        except ValueError:
+            return None, {"error": "invalid case dir"}, 400
+        if not target.exists() or not target.is_dir():
+            return None, {"error": f"case not found: {case_dir}"}, 404
+        return target, None, None
+
     def do_GET(self):
+        if not self._guard_host():
+            self._send_json({"error": "forbidden host"}, 403)
+            return
         parsed = urlparse(self.path)
         path = unquote(parsed.path)
 
@@ -139,21 +226,17 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if path == "/api/cases":
-            self._send_json(parse_case.list_cases())
+            self._send_json(_list_cases_cached())
             return
 
         if path.startswith("/api/case/"):
             case_dir = path[len("/api/case/"):].strip("/")
-            if not case_dir:
-                self._send_json({"error": "missing case dir"}, 400)
-                return
-            target = parse_case.CASES_DIR / case_dir
-            if not target.exists() or not target.is_dir():
-                self._send_json({"error": f"case not found: {case_dir}"}, 404)
+            target, err, err_status = self._resolve_case_dir(case_dir)
+            if err:
+                self._send_json(err, err_status)
                 return
             try:
-                role_map = parse_case._load_role_map()
-                self._send_json(parse_case.parse_case(target, role_map))
+                self._send_json(_parse_case_cached(case_dir))
             except Exception as e:  # noqa: BLE001 —— 解析失败也要返回可读错误
                 self._send_json({"error": f"parse failed: {e}"}, 500)
             return
@@ -182,6 +265,9 @@ class Handler(BaseHTTPRequestHandler):
         self._send_json({"error": "not found"}, 404)
 
     def do_POST(self):
+        if not self._guard_host():
+            self._send_json({"error": "forbidden host"}, 403)
+            return
         parsed = urlparse(self.path)
         path = unquote(parsed.path)
 
@@ -205,6 +291,29 @@ class Handler(BaseHTTPRequestHandler):
                 return
             run["cancel_event"].set()
             self._send_json({"ok": True})
+            return
+
+        self._send_json({"error": "not found"}, 404)
+
+    def do_DELETE(self):
+        if not self._guard_host():
+            self._send_json({"error": "forbidden host"}, 403)
+            return
+        parsed = urlparse(self.path)
+        path = unquote(parsed.path)
+
+        if path.startswith("/api/case/"):
+            case_dir = path[len("/api/case/"):].strip("/")
+            target, err, err_status = self._resolve_case_dir(case_dir)
+            if err:
+                self._send_json(err, err_status)
+                return
+            try:
+                shutil.rmtree(target)
+            except OSError as e:
+                self._send_json({"error": f"delete failed: {e}"}, 500)
+                return
+            self._send_json({"ok": True, "deleted": case_dir})
             return
 
         self._send_json({"error": "not found"}, 404)

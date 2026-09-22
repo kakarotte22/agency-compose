@@ -22,8 +22,9 @@ import sys
 import threading
 from pathlib import Path
 
-# 单次编排的总超时（秒）：防止 claude 进程卡死时 SSE 连接永久挂住
-COMPOSE_TIMEOUT = 3600
+# 单次编排的总超时（秒）：防止 claude 进程卡死时 SSE 连接永久挂住。
+# 可用环境变量 VIEWER_COMPOSE_TIMEOUT 按场景调整。
+COMPOSE_TIMEOUT = float(os.environ.get("VIEWER_COMPOSE_TIMEOUT", "3600"))
 
 ROOT = Path(__file__).resolve().parent.parent
 
