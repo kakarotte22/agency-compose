@@ -7,7 +7,7 @@
 
 改造后的项目完全脱离 `agency-orchestrator` 运行时，由 Claude Code 原生调度。
 
-> **关于 `cases/` 存档**：`cases/` 是每次 `/compose` 运行的**本地留痕目录**，已通过 `.gitignore` 排除在版本库之外（仅 `.claude/` 里的角色、命令、脚本、以及 `viewer/` 源码入库）。你机器上跑出来的案例只存在本地、不入 git；`viewer/` 依赖它做历史回放，但不会提交这些内容。
+> **关于 `cases/` 存档**：`cases/` 是每次 `/compose` 运行的留痕目录。仓库内置 4 个示例案例存档供 `viewer/` 回放演示；你机器上新跑出来的案例也会出现在这里。
 
 ---
 
@@ -33,7 +33,7 @@ agency-compose/
 │   ├── parse_case.py           # case 目录 → 结构化 JSON
 │   ├── runner.py               # 拉起 claude CLI 真实执行编排
 │   └── index.html              # 自包含前端（DAG + 实时日志）
-├── cases/                      # 每次任务的存档：DAG方案/步骤产出/代码与结果/最终报告（已 gitignore，仅存本地）
+├── cases/                      # 每次任务的存档：DAG方案/步骤产出/代码与结果/最终报告（仓库已含 4 个示例案例）
 │   └── <任务名>-时间戳/
 │       ├── 00-总览.md          # 阅读锚点（DAG图 + 结论 + 导航表）
 │       ├── 10-DAG方案.json
@@ -102,6 +102,10 @@ python3 viewer/server.py 8080     # 或指定端口
 ```
 
 浏览器打开 **http://127.0.0.1:8765**。
+
+![viewer 界面截图](docs/viewer-screenshot.png)
+
+*「商业航天」11 步案例的任务流 DAG：分层拓扑、并行 fan-out/fan-in、`↻` 对抗辩论子循环，左侧为历史档案列表，顶部为步骤统计 KPI。*
 
 **能看到什么**：
 
