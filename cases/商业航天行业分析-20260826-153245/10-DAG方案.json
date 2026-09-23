@@ -1,0 +1,30 @@
+{
+  "topology": "Route → 4 并行研究（市场/竞争/投融资/政策）→ 交叉校验（含 evaluator-optimizer 循环）→ 结构化成稿 → 高管摘要",
+  "steps": [
+    {"id": "s1_router_scope", "role": "general-purpose", "output": "report_scope + dimension_assignments + clarifications", "depends_on": []},
+    {"id": "s2a_market_trend", "role": "product-trend-researcher", "output": "market_size / industry_chain / tech_trends / forward_look", "depends_on": ["s1_router_scope"]},
+    {"id": "s2b_competitive_strategy", "role": "business-strategist", "output": "competitive_landscape / key_players / business_models", "depends_on": ["s1_router_scope"]},
+    {"id": "s2c_finance_investment", "role": "finance-investment-researcher", "output": "funding_activity / valuation_notes / capital_flow_trends", "depends_on": ["s1_router_scope"]},
+    {"id": "s2d_policy_risk", "role": "support-legal-compliance-checker", "output": "policy_landscape / regulatory_issues / frequency_orbit / risks", "depends_on": ["s1_router_scope"]},
+    {"id": "s3_synthesis_verify", "role": "support-analytics-reporter", "output": "integrated_findings / cross_contradictions / data_gaps（含矛盾校验循环 max_rounds=3）", "depends_on": ["s2a_market_trend", "s2b_competitive_strategy", "s2c_finance_investment", "s2d_policy_risk"]},
+    {"id": "s4_structurize", "role": "specialized-report-structurer", "output": "金字塔原理完整报告正文", "depends_on": ["s3_synthesis_verify"]},
+    {"id": "s5_exec_summary", "role": "support-executive-summary-generator", "output": "高管摘要", "depends_on": ["s4_structurize"]}
+  ],
+  "merge": "加权拼接 + 指定角色综合（s3 交叉校验 → s4 统稿 → s5 摘要）",
+  "final_role": "support-executive-summary-generator",
+  "resume_from": "",
+  "missing_roles": [
+    {
+      "role": "航天/火箭领域技术专家（aerospace-domain-expert）",
+      "reason": "可复用火箭、卫星平台与载荷、轨道动力学等深度工程/物理细节，现有趋势/战略/投融资角色均无法对技术路线工程可行性负责。"
+    },
+    {
+      "role": "卫星通信/频率轨道资源专家（satcom-spectrum-orbit-expert）",
+      "reason": "ITU 频率申报、轨道面分配、低轨碰撞风险等工程-监管交叉问题，法务角色只懂条文不会研判频谱轨道技术。"
+    },
+    {
+      "role": "政策监管深度研判专家（aerospace-policy-analyst）",
+      "reason": "中国商业航天政策体制（发射许可、军民融合、星网边界、卫星互联网牌照）需要专门政策脉络认知，现有合规角色只做条文比对。"
+    }
+  ]
+}

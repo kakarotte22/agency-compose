@@ -1,0 +1,90 @@
+{
+  "topology": "Router（主程序以默认需求参数路由）→ 3 路并行检索 fan-out（新闻事件 s1 / 市场与资本 s2 / 技术趋势与产业链 s3，相互独立可并发）→ fan-in 战略综合（s4）→ 证据审计 gate（s5，带 backedge 回路：若关键数据无信源支撑或口径矛盾，回退 s2 重新取数后串行重跑 s4/s5）→ 报告结构化成稿（s6）→ 高管摘要（s7）。共 7 步、1 个回路边、无辩论回路。",
+  "steps": [
+    {
+      "id": "s1_news_events",
+      "role": "marketing-daily-news-briefing",
+      "input": "用户原始需求 + 默认参数（地域=全球+中国，时间窗=近 1 年为主、可追溯至 2020 格局）。检索主题：卫星互联网 / 低轨星座（Starlink、Kuiper、OneWeb/Eutelsat、中国星网 GW 星座、千帆/G60）的重大事件——发射与部署里程碑、融资与 IPO、大额合同、频轨分配、牌照与政策动态、破产与重组。",
+      "output": "结构化简报（JSON）：{ events: [{ date, region(global/china), actor, event_type(融资/发射/政策/合同/破产/技术), summary, source, source_credibility(高/中/低), cross_verified(bool) }], timeline_2020_to_now: 按年关键格局变化 3-5 条, summary: ≤300 token 中文摘要（供下游压缩上下文用）, data_gaps: [无法交叉验证的事件] }。每条事件必须带来源与可信度标注。",
+      "depends_on": [],
+      "fallback": "若新闻采集工具不可用或信源大面积不可达：降级为仅输出 data_gaps 与已缓存的 2020-2024 格局性事件（不带实时部分），并在 summary 中显式标注『实时事件维度缺失、专业深度受限』，不阻塞下游。",
+      "loop": { "enabled": false, "mode": "self", "group": "", "max_rounds": 3, "converge_when": "", "partners": [], "affected_downstream": [], "fix": "" }
+    },
+    {
+      "id": "s2_market_capital",
+      "role": "finance-investment-researcher",
+      "input": "用户原始需求 + 默认参数。独立检索（可与 s1 并行，不依赖其输出）：卫星互联网市场规模（TAM/SAM/SOM，全球与中国分列）、主要玩家画像（Starlink/SpaceX、Amazon Kuiper、Eutelsat OneWeb、中国星网、上海垣信千帆、传统 GEO 卫星运营商）、竞争格局（市占率、在轨卫星数、订户数、收入量级）、资本动态（融资、估值、上市）、频谱与轨道资源监管环境（ITU 申报、各国牌照）、产业链价值分布（卫星制造/发射/地面设备/运营服务）。",
+      "output": "机构级行业研究底稿（JSON）：{ market_size: { global_tam, china_tam, growth_rate_cagr, basis_and_source, 口径说明 }, players: [{ name, region, satellites_in_orbit, subscribers_or_revenue_scale, funding_valuation, moat_assessment, source }], competitive_landscape: 集中度与格局演变叙述, regulatory_environment: { global: [...], china: [...] }, supply_chain: 上中下游分段及价值分布, bull_thesis: [...], bear_thesis: [...], key_numbers_with_sources: [{ metric, value, source, confidence }], summary: ≤300 token 中文摘要, data_gaps: [...] }。所有关键数字必须附一手或高可信信源，无法核实的数字必须标注 confidence=low。",
+      "depends_on": [],
+      "fallback": "若深度取数失败：退为基于公开常识的格局性描述（不含具体市场规模数字），并在 output 的 data_gaps 与 summary 中显式标注『市场规模与财务维度仅有定性判断、数据深度不足』，供 s4/s5 感知降级。",
+      "loop": { "enabled": false, "mode": "self", "group": "", "max_rounds": 3, "converge_when": "", "partners": [], "affected_downstream": [], "fix": "" }
+    },
+    {
+      "id": "s3_tech_trend",
+      "role": "product-trend-researcher",
+      "input": "用户原始需求 + 默认参数。独立检索（可与 s1/s2 并行）：卫星互联网技术趋势——星间激光链路、低轨星座构型与衰减补网、相控阵天线与终端小型化、手机直连卫星（D2C）、频率复用与频谱效率、批量化卫星制造与低成本发射；产业链技术环节（火箭发射成本、卫星平台、地面段）；区分炒作与真趋势（按『真金白银投入』标准）；未来 6-18 个月技术演进方向。",
+      "output": "趋势分析底稿（JSON）：{ trends: [{ name, lifecycle_stage(萌芽/成长/成熟/衰退), evidence_of_real_investment, key_players_investing, impact_on_industry, source, credibility }], hype_vs_real: [{ topic, 判定(真趋势/炒作), 依据 }], tech_roadmap_6_18mo: [有序列表], supply_chain_tech_view: 技术视角的产业链瓶颈与机会, summary: ≤300 token 中文摘要, data_gaps: [...] }。区分事实与观点，标注来源与可信度。",
+      "depends_on": [],
+      "fallback": "若检索受限：降级输出基于已有知识的技术框架分析（不含最新 6 个月动态），并在 summary 中标注『技术动态时效性不足』。",
+      "loop": { "enabled": false, "mode": "self", "group": "", "max_rounds": 3, "converge_when": "", "partners": [], "affected_downstream": [], "fix": "" }
+    },
+    {
+      "id": "s4_strategy_synthesis",
+      "role": "business-strategist",
+      "input": "s1_news_events 的 events + timeline + summary、s2_market_capital 的 market_size + players + competitive_landscape + regulatory_environment + supply_chain + bull/bear_thesis + summary、s3_tech_trend 的 trends + hype_vs_real + tech_roadmap + summary（各步骤摘要字段优先，正文按需引用；不注入各步骤的完整 system prompt）。",
+      "output": "战略综合分析（Markdown + 结构化字段）：{ core_conclusion: 一句话行业判断, market_entry_dynamics: 格局与演变动力, business_model_analysis: 各主要玩家商业模式与单位经济对比, moat_analysis: 护城河评估（频轨资源/发射能力/成本结构/政府关系）, scenarios: { base, upside, downside 各含关键驱动变量 }, opportunities: [按优先级排序、含量化依据], risks: [按优先级排序，含触发条件], recommendations: [带时间维度的可执行建议], trade_offs: 每条建议明确放弃了什么 }。引用上游数据时标注来源步骤与信源。",
+      "depends_on": ["s1_news_events", "s2_market_capital", "s3_tech_trend"],
+      "fallback": "若上游某路检索整体失败（如 s1 降级为空）：基于剩余两路完成综合，并在 core_conclusion 后显式标注『事件维度/市场维度数据缺失，结论覆盖度受限』。",
+      "loop": { "enabled": false, "mode": "self", "group": "", "max_rounds": 3, "converge_when": "", "partners": [], "affected_downstream": [], "fix": "" }
+    },
+    {
+      "id": "s5_evidence_audit",
+      "role": "testing-reality-checker",
+      "input": "s4_strategy_synthesis 的完整产出 + s2_market_capital 的 key_numbers_with_sources 与 data_gaps + s3_tech_trend 的 trends（用于核对信源是否存在、口径是否一致）。",
+      "output": "证据审计报告（JSON）：{ verdict: pass | pass_with_flags | fail, unsupported_claims: [{ claim, 出现于哪个分析环节, 缺失的证据类型 }], inconsistent_numbers: [{ metric, 冲突值与出处 }], downgraded_conclusions: [应降级为『存疑/方向性判断』的结论], overall_evidence_quality: 高/中/低 + 说明 }。默认立场为怀疑：无信源支撑的关键数字一律列入 unsupported_claims。",
+      "depends_on": ["s4_strategy_synthesis"],
+      "fallback": "若审计无法完成（上游数据不足以开展核对）：输出 verdict=pass_with_flags、overall_evidence_quality=low，并在 downgraded_conclusions 中标注『本报告未经证据审计』，放行至 s6——系统必须产出结构化降级结果而非静默失败。",
+      "loop": {
+        "enabled": true,
+        "mode": "backedge",
+        "group": "evidence-backfill",
+        "max_rounds": 2,
+        "converge_when": "",
+        "partners": ["s2_market_capital"],
+        "affected_downstream": ["s4_strategy_synthesis", "s5_evidence_audit"],
+        "fix": "当 verdict=fail 时触发回退：向 s2_market_capital 下发 unsupported_claims 与 inconsistent_numbers 清单，要求重新检索核实这些数据点（市场规模口径与出处、在轨/订户/收入数字、融资与合同金额、频轨与政策时间线；其中属技术侧的公开事实性数字一并核实），补充或修正信源后返回增量结果；随后 s4、s5 串行重跑。"
+      }
+    },
+    {
+      "id": "s6_report_assembly",
+      "role": "specialized-report-structurer",
+      "input": "s4_strategy_synthesis 的战略综合产出 + s5_evidence_audit 的审计结果（unsupported_claims/downgraded_conclusions 必须落实到正文降级表述）+ s1/s2/s3 各自的 summary 字段作为素材索引。",
+      "output": "完整行业分析报告（Markdown，金字塔结构）：标题；执行摘要（2-3 句核心结论前置）；主体按层级展开——一、行业概述与市场规模；二、竞争格局与主要玩家；三、技术趋势与产业链；四、商业模式与单位经济；五、政策与监管环境；六、风险与机会（含量化依据）；七、情景分析与建议；附录：事件时间线 + 信源清单。所有被 s5 降级的结论在正文中显式标注（如『该判断证据有限，为方向性判断』）。",
+      "depends_on": ["s4_strategy_synthesis", "s5_evidence_audit"],
+      "fallback": "若素材不足：收窄为「格局 + 竞争 + 风险机会」三章精简版报告，开头声明覆盖度受限；绝不为凑章节编造数据。",
+      "loop": { "enabled": false, "mode": "self", "group": "", "max_rounds": 3, "converge_when": "", "partners": [], "affected_downstream": [], "fix": "" }
+    },
+    {
+      "id": "s7_exec_summary",
+      "role": "support-executive-summary-generator",
+      "input": "s6_report_assembly 的完整报告（唯一输入，不回读上游原始数据，控制上下文）。",
+      "output": "面向管理层/决策者的高管摘要（SCQA 结构）：S 情境（行业当前状态一句话）、C 冲突（关键变局）、Q 问题（决策者需要回答的问题）、A 答案（3-5 条核心判断与建议，每条带一句量化依据）；附『三分钟版』要点清单。中文，不超过 800 字。",
+      "depends_on": ["s6_report_assembly"],
+      "fallback": "若 s6 降级为精简版：摘要同步声明覆盖范围；若本步骤失败，由 s6 报告自带的执行摘要直接作为成品交付。",
+      "loop": { "enabled": false, "mode": "self", "group": "", "max_rounds": 3, "converge_when": "", "partners": [], "affected_downstream": [], "fix": "" }
+    }
+  ],
+  "merge": "成品 = s7_exec_summary（高管摘要，置于最前）+ s6_report_assembly（完整金字塔结构报告正文 + 附录信源清单）。s5 的审计结论不直接进入成品，而是以降级标注的形式内化在 s6 正文中；s1/s2/s3 的结构化底稿作为附录素材保留供追溯。若 s7 失败则以 s6 的执行摘要兜底，系统始终交付完整成品。",
+  "final_role": "specialized-report-structurer",
+  "resume_from": "",
+  "missing_roles": [],
+  "_design_notes": {
+    "architect_agent_id": "a1b22939df6558866",
+    "notes": [
+      "架构师声明：s4.depends_on 与 s5.input 中的 s3 placeholder 笔误，统一以 steps 内真实 id s3_tech_trend 为准（本存档已修正）。",
+      "唯一回路：s5→s2 backedge（group=evidence-backfill，max_rounds=2），fail 时只回退数据最重的 s2 并串行重跑 s4/s5。",
+      "每个检索步骤输出 ≤300 token summary 字段，下游优先消费摘要，控上下文预算。",
+      "卫星互联网垂直专家（第 23 组留空占位）经判据口诀认定为质量缺口，不报 missing_roles，专业深度不足以信源标注 + 证据审计对冲。"
+    ]
+  }
+}

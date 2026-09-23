@@ -1,0 +1,22 @@
+{
+  "topology": "四层 Orchestrator-FanOut + 对抗校验循环：情报采集(并行) → 领域分析(5 并行) → 对抗校验+辩论循环 → 成品(结构化+摘要)",
+  "steps": [
+    {"id": "research_trend", "role": "product-trend-researcher", "depends_on": []},
+    {"id": "research_news", "role": "marketing-daily-news-briefing", "depends_on": ["research_trend"]},
+    {"id": "research_investment", "role": "finance-investment-researcher", "depends_on": ["research_news"]},
+    {"id": "research_general", "role": "general-purpose", "depends_on": ["research_trend", "research_news", "research_investment"]},
+    {"id": "analyze_techstack", "role": "engineering-ai-engineer", "depends_on": ["research_general"]},
+    {"id": "analyze_competitive", "role": "business-strategist", "depends_on": ["research_general"]},
+    {"id": "analyze_policy", "role": "specialized-ai-policy-writer", "depends_on": ["research_general"]},
+    {"id": "analyze_investment", "role": "support-analytics-reporter", "depends_on": ["research_general"]},
+    {"id": "analyze_risks", "role": "business-strategist", "depends_on": ["research_general"]},
+    {"id": "adversarial_check", "role": "academic-statistician", "depends_on": ["analyze_techstack", "analyze_competitive", "analyze_policy", "analyze_investment", "analyze_risks"]},
+    {"id": "debate_synthesis", "role": "business-strategist", "depends_on": ["adversarial_check"], "loop": {"enabled": true, "max_rounds": 3}},
+    {"id": "structure_report", "role": "specialized-report-structurer", "depends_on": ["debate_synthesis"]},
+    {"id": "exec_summary", "role": "support-executive-summary-generator", "depends_on": ["structure_report"]}
+  ],
+  "merge": "分层合并：情报底座 → 5 并行领域分析 → 统计学家量化核验 → 商业战略家辩论收敛 → 结构化统稿 + 高管摘要",
+  "final_role": "specialized-report-structurer",
+  "resume_from": "",
+  "missing_roles": []
+}

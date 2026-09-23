@@ -1,0 +1,114 @@
+{
+  "topology": "层级式（Orchestrator-Subagent）+ 并行 Fan-out/Fan-in + 一个对抗辩论子循环。主链路：情报采集（并行 fan-out 4 路）→ 各维度分析（并行 fan-out，含一个辩论子循环）→ 数据/统计校验 → 结构化合成 → 高管摘要 → 成品报告。合并策略由合成器（Synthesizer）负责，各分析维度结构化输出+置信度信号，缺失/低置信分支显式降级。航天/火箭/卫星是本角色库暂缺分组，所有航天专业维度均为质量缺口而非可行性缺口：以通用角色+联网检索产出诚实可用结果，并在各维度 output 契约中强制标注「该维度专业深度受限/置信度打折」。",
+  "steps": [
+    {
+      "id": "intel-news-briefing",
+      "role": "marketing-daily-news-briefing",
+      "input": "主题词：商业航天/火箭发射/卫星互联网/卫星制造/低轨星座/可回收火箭/星舰/星链/商业航天公司；时间窗：2025-08 至 2026-08；地域：全球+中国",
+      "output": "structured_news_brief：近一年商业航天公开事件清单，每条含 {date, source_url, company, event_type, key_figures, region}",
+      "depends_on": [],
+      "fallback": "降级：general-purpose 定向 web_search 补采；仍无则输出空简报并在合并层标记",
+      "loop": { "enabled": false }
+    },
+    {
+      "id": "intel-trend-research",
+      "role": "product-trend-researcher",
+      "input": "主题：商业航天行业趋势与技术前瞻；时间窗 6-18 个月；输入自 intel-news-briefing + 联网检索",
+      "output": "trend_analysis：结构化趋势清单，每项含 {trend_name, lifecycle_stage, signal_evidence, time_horizon, confidence}",
+      "depends_on": ["intel-news-briefing"],
+      "fallback": "降级：general-purpose 做趋势综述，置信度降一档",
+      "loop": { "enabled": false }
+    },
+    {
+      "id": "intel-social-signal",
+      "role": "marketing-x-twitter-intelligence-analyst",
+      "input": "监测对象：SpaceX/蓝源/火箭实验室 及中国商业航天头部账号；输入自 intel-news-briefing",
+      "output": "social_signal_report：结构化信号 {signal, evidence, sentiment, trend_direction, confidence}",
+      "depends_on": ["intel-news-briefing"],
+      "fallback": "降级：general-purpose 做公开社交与媒体信号搜索；失败则该维度标记缺失",
+      "loop": { "enabled": false }
+    },
+    {
+      "id": "intel-local-kb",
+      "role": "risk-knowledge-retriever",
+      "input": "在用户本地知识库（Obsidian /Users/admin/my_docs/kakarotto）检索商业航天相关经验",
+      "output": "local_kb_hits：命中文件路径+关键片段（只检索不研判）；零命中则明确返回无本地经验",
+      "depends_on": [],
+      "fallback": "降级：本地库无相关笔记属正常，返回空命中标记即可",
+      "loop": { "enabled": false }
+    },
+    {
+      "id": "analyze-market-strategy",
+      "role": "business-strategist",
+      "input": "输入 intel-news-briefing + intel-trend-research；竞争格局、商业模式、增长与竞争分析，全球与中国对比",
+      "output": "market_strategy：{market_map, competitive_dynamics, business_model_assessment, china_vs_global, opportunities, threats, confidence}",
+      "depends_on": ["intel-news-briefing", "intel-trend-research"],
+      "fallback": "降级：general-purpose 做基础 SWOT/竞争综述",
+      "loop": { "enabled": false }
+    },
+    {
+      "id": "analyze-capital-investment",
+      "role": "finance-investment-researcher",
+      "input": "输入 intel-news-briefing；投融资/资本市场维度：融资事件、估值、上市并购、看多看空",
+      "output": "capital_analysis：{funding_events, valuation_trend, m_and_a, bull_case, bear_case, key_risks_with_downside, confidence}",
+      "depends_on": ["intel-news-briefing"],
+      "fallback": "降级：general-purpose 做融资事件聚合",
+      "loop": { "enabled": false }
+    },
+    {
+      "id": "analyze-pricing-economics",
+      "role": "specialized-pricing-analyst",
+      "input": "输入 intel-news-briefing + intel-trend-research；单位经济与定价维度（$/kg、复用成本曲线、卫星制造成本）",
+      "output": "pricing_economics：{cost_curves, unit_economics, margin_trend, pricing_drivers, elasticity, confidence}",
+      "depends_on": ["intel-news-briefing", "intel-trend-research"],
+      "fallback": "降级：general-purpose 做成本趋势粗略估算，标注低置信",
+      "loop": { "enabled": false }
+    },
+    {
+      "id": "debate-bull-bear",
+      "role": "specialized-strategy-duel-agent",
+      "input": "输入 market-strategy + capital-investment + pricing-economics；对「商业航天是否进入可持续盈利/规模化拐点」做多空对决",
+      "output": "debate_record：{rounds, verdict, nash_equilibrium_check, actionable_insights}",
+      "depends_on": ["analyze-market-strategy", "analyze-capital-investment", "analyze-pricing-economics"],
+      "fallback": "降级：跳过辩论，合成层自行多空对照",
+      "loop": { "enabled": true, "max_rounds": 3, "converge_when": "双方核心论点充分展开且无新增实质论据，或达到 max_rounds=3 强制收束" }
+    },
+    {
+      "id": "validate-statistical",
+      "role": "academic-statistician",
+      "input": "输入关键数据 + 各维度量化论断；拷问方法论，区分信号与噪声",
+      "output": "statistical_validation：{claim, evidence_quality, measurement_caveat, signal_vs_noise_verdict, confidence}",
+      "depends_on": ["intel-news-briefing", "analyze-market-strategy", "analyze-capital-investment", "analyze-pricing-economics"],
+      "fallback": "降级：general-purpose 做基础交叉校验，或声明未校验",
+      "loop": { "enabled": false }
+    },
+    {
+      "id": "synthesize-report",
+      "role": "specialized-report-structurer",
+      "input": "全部上游结构化输出；按金字塔原理组织为完整报告主体",
+      "output": "report_body：完整报告主体（标题+核心结论+分章节+结论建议），含专业深度受限声明汇总段",
+      "depends_on": ["intel-news-briefing", "intel-trend-research", "intel-social-signal", "intel-local-kb", "analyze-market-strategy", "analyze-capital-investment", "analyze-pricing-economics", "debate-bull-bear", "validate-statistical"],
+      "fallback": "降级：general-purpose 直接拼接各维度输出",
+      "loop": { "enabled": false }
+    },
+    {
+      "id": "summarize-executive",
+      "role": "support-executive-summary-generator",
+      "input": "输入 synthesize-report 的 report_body；产出高管摘要",
+      "output": "executive_summary：SCQA 结构高管摘要，含置信度提示",
+      "depends_on": ["synthesize-report"],
+      "fallback": "降级：general-purpose 抽取首段结论",
+      "loop": { "enabled": false }
+    }
+  ],
+  "merge": "合成策略（synthesize-report 执行）：各上游维度结构化 JSON 带 confidence。全量到齐→金字塔整合；部分缺失→显式占位；全失败→结构化降级报告。低置信或专业深度受限维度独立成「局限性与置信度声明」章节。矛盾以统计校验与辩论裁决为仲裁，仍无法消解则并列呈现标记待人工研判。",
+  "final_role": "specialized-report-structurer",
+  "resume_from": null,
+  "missing_roles": [
+    {
+      "role": "航天/火箭/卫星领域专业角色（launch-industry-analyst 等）",
+      "type": "quality",
+      "reason": "航天专业技术深度在本角色库第23组末尾明确标注为「暂缺角色」留白分组。但行业分析属公开事实+可检索任务，通用角色+联网检索仍能产出诚实可用结果，只是专业深度打折，故报质量缺口而非可行性缺口。已在各步骤 output 契约强制标注专业深度受限，并在报告设「局限性与置信度声明」章节兜底。"
+    }
+  ]
+}

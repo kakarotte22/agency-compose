@@ -1,6 +1,5 @@
 .DS_Store
 .claude/settings.local.json
-cases/
 *.log
 .env
 .env.local
